@@ -9,11 +9,10 @@ on:
       node-version:
         type: string
         required: false
-        default: '[18, 20]'
+        default: '[20, 22]'
       pnpm-version:
         type: string
         required: false
-        default: 8.15.3
       codecov-flags:
         type: string
         required: false
