@@ -6,7 +6,9 @@ on:
         type: string
         required: false
     outputs:
-      published: ${{ jobs.release.outputs.published }}
+      published:
+        description: 'Whether the release was published'
+        value: ${{ jobs.release.outputs.published }}
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
