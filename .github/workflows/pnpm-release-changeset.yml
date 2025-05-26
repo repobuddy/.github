@@ -5,6 +5,8 @@ on:
       pnpm-version:
         type: string
         required: false
+    outputs:
+      published: ${{ jobs.release.outputs.published }}
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
