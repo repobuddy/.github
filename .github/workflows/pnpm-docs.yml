@@ -11,7 +11,7 @@ on:
         default: ./docs
 
 jobs:
-  npm:
+  publish-github-pages:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
