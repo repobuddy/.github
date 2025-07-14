@@ -22,7 +22,7 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.CI_GITHUB_TOKEN }}
-      - uses: pnpm/action-setup@v3
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -43,6 +43,9 @@ jobs:
 
       - name: Install Dependencies
         run: pnpm install
+
+      - name: Install vsce
+        run: pnpm install -g vsce
 
       - run: pnpm build
       - name: update .npmrc with token

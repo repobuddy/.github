@@ -25,9 +25,7 @@ jobs:
         node-version: ${{ fromJson(inputs.node-version) }}
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v3
-        with:
-          version: ${{ inputs.pnpm-version }}
+      - uses: pnpm/action-setup@v4
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
@@ -63,6 +61,6 @@ jobs:
           path: '**/__snapshots__/linux'
       - name: codecov
         if: matrix.os == 'ubuntu-latest' && matrix.node-version == 20
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           flags: ${{ inputs.codecov-flags }}
