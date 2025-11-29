@@ -41,11 +41,23 @@ runs:
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "Playwright version: $VERSION"
 
+    - name: Set Playwright cache path
+      id: playwright-cache-path
+      shell: bash
+      run: |
+        if [ "${{ runner.os }}" == "Windows" ]; then
+          CACHE_PATH="$LOCALAPPDATA/ms-playwright"
+        else
+          CACHE_PATH="$HOME/.cache/ms-playwright"
+        fi
+        echo "path=$CACHE_PATH" >> $GITHUB_OUTPUT
+        echo "Playwright cache path: $CACHE_PATH"
+
     - name: Cache Playwright browsers
       id: cache-playwright
       uses: actions/cache@v4
       with:
-        path: ~/.cache/ms-playwright
+        path: ${{ steps.playwright-cache-path.outputs.path }}
         key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}-${{ inputs.browsers }}
         restore-keys: |
           ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}-
