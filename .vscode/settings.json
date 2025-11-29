@@ -4,6 +4,7 @@
     "codeql",
     "npmjs",
     "pnpx",
+    "repobuddy",
     "xvfb"
   ]
 }
