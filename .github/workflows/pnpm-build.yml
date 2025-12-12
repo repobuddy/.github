@@ -24,7 +24,7 @@ jobs:
       - name: Install Dependencies
         run: pnpm install
       - name: Archive build output
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: build
           path: |
