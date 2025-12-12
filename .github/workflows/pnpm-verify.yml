@@ -47,7 +47,7 @@ jobs:
 
       - name: Archive snapshots/linux
         if: failure()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: snapshots
           path: '**/__snapshots__/linux'
