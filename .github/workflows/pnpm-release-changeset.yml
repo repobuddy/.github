@@ -9,6 +9,8 @@ on:
       published:
         description: 'Whether the release was published'
         value: ${{ jobs.release.outputs.published }}
+permissions:
+  id-token: write
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
