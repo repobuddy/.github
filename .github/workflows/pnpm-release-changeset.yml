@@ -40,12 +40,12 @@ jobs:
         run: pnpm install -g vsce
 
       - run: pnpm build
-      - name: update .npmrc with token
-        run: |
-          cat << EOF > "$HOME/.npmrc"
-            //registry.npmjs.org/:_authToken=$NPM_TOKEN
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # - name: update .npmrc with token
+      #   run: |
+      #     cat << EOF > "$HOME/.npmrc"
+      #       //registry.npmjs.org/:_authToken=$NPM_TOKEN
+      #   env:
+      #     NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Create Release Pull Request or Publish to npm
         id: changesets
         uses: changesets/action@v1
@@ -54,6 +54,8 @@ jobs:
           version: pnpm run version
           publish: pnpm run release
         env:
+          # Set to empty string to use OIDC token
+          NPM_TOKEN: ''
           GITHUB_TOKEN: ${{ secrets.CI_GITHUB_TOKEN }}
 
       # - name: Send a Slack notification if a publish happens
