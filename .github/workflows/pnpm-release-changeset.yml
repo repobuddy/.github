@@ -17,6 +17,10 @@ concurrency: ${{ github.workflow }}-${{ github.ref }}
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      PLAYWRIGHT_PATH: ~/.cache/ms-playwright
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     outputs:
       published: ${{ steps.changesets.outputs.published }}
     steps:
@@ -54,9 +58,6 @@ jobs:
           version: pnpm run version
           publish: pnpm run release
         env:
-          # Set to empty string to use OIDC token
-          # NPM_TOKEN: ''
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.CI_GITHUB_TOKEN }}
 
       # - name: Send a Slack notification if a publish happens
