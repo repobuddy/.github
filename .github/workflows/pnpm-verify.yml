@@ -56,3 +56,14 @@ jobs:
         uses: codecov/codecov-action@v6
         with:
           flags: ${{ inputs.codecov-flags }}
+
+  all-checks:
+    needs: [verify]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: All checks passed
+        run: |
+          if [[ "${{ needs.verify.result }}" != "success" ]]; then
+            exit 1
+          fi
