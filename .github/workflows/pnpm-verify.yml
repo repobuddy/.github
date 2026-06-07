@@ -60,7 +60,7 @@ jobs:
             **/__vis__/**/__results__
       - name: codecov
         if: matrix.os == 'ubuntu-latest' && matrix.node-version == 'lts/*'
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           flags: ${{ inputs.codecov-flags }}
 
