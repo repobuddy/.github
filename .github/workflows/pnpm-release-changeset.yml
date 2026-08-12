@@ -11,7 +11,7 @@ on:
         value: ${{ jobs.release.outputs.published }}
 permissions:
   id-token: write
-  contents: read
+  contents: write
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
@@ -55,9 +55,10 @@ jobs:
         id: changesets
         uses: changesets/action@v2.0.0
         with:
-          commit: 'chore: version packages'
-          version: pnpm run version
-          publish: pnpm run release
+          github-token: ${{ secrets.CI_GITHUB_TOKEN }}
+          commit-message: 'chore: version packages'
+          version-script: pnpm run version
+          publish-script: pnpm run release
         env:
           GITHUB_TOKEN: ${{ secrets.CI_GITHUB_TOKEN }}
           NPM_TOKEN: ''
