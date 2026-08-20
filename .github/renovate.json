@@ -1,5 +1,14 @@
 {
   "extends": [
     "github>unional/renovate-preset"
+  ],
+  "packageRules": [
+    {
+      "description": "changesets/action's major is the v1/v2 line boundary, not a dependency bump. Moving it is a deliberate release decision made alongside the consumers' @changesets/cli major. See README 'Why there are two lines'.",
+      "matchManagers": ["github-actions"],
+      "matchDepNames": ["changesets/action"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    }
   ]
 }

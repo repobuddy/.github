@@ -67,7 +67,7 @@ lines exist in parallel rather than one being a migration deadline:
 | --- | --- | --- |
 | `repobuddy/repobuddy` | `^3.0.0` | `@v2` |
 | `repobuddy/storybook` | `^2.29.7` | `@v1` |
-| `repobuddy/visual-testing` | `^2.29.8` | `@v1` |
+| `repobuddy/visual-testing` | `^3.0.0` | `@v2` |
 | `repobuddy/rolldown-inline-type-exports` | `^2.29.8` | `@v1` |
 | `repobuddy/jest-watch-toggle-config-2` | `^2.25.2` | `@v1` |
 
@@ -125,6 +125,13 @@ the next release was attempted.
 Tagging fixes the consumer half of this — an auto-merged bump now lands on
 `main` and waits there until someone cuts a release. The Mergify rule not
 actually excluding majors is a separate defect and should be fixed on its own.
+
+It kept happening after the lines were split: Renovate carried `main` on to
+`changesets/action` `v2`, `v2.1.0` and `v2.1.1` while `main` is the v1 line, so
+the v1 workflows ran action v2 against v1 input names and every release on that
+line aborted with *"The following inputs have been renamed"*. `.github/renovate.json`
+now disables major updates for `changesets/action` outright, because that major
+is the line boundary — it is moved by cutting a new line, never by a bump.
 
 ### Starting version: `v1.0.0`
 
@@ -287,22 +294,16 @@ and `v2` substituted.
 Step 3 is the one that is easy to get wrong or forget. If the alias is not
 moved, the release is invisible to everyone pinning it.
 
-#### Known gap: internal refs still float on `@main`
+#### Internal refs
 
 Workflows in this repo consume this repo's own composite action:
 
 ```text
-        uses: repobuddy/.github/.github/actions/setup-playwright@main
+        uses: repobuddy/.github/.github/actions/setup-playwright@v1
 ```
 
 A reusable workflow cannot reference a sibling action by relative path — `./`
 resolves against the *caller's* checkout, not this repo's — so these must be
-fully-qualified `owner/repo/path@ref`, and today that ref is `@main`. **A
-consumer pinned at `@v1` therefore still picks up `setup-playwright` from
-`main`,** which partially defeats the pin.
-
-This is deliberately not fixed in the same change that introduces the scheme:
-re-pointing them to `@v1` before `v1` exists would break every current consumer
-immediately. Once `v1.0.0` is cut, change these to `@v1` on `main` and `@v2` on
-`v2.x` — the moving aliases, so they do not need touching on every subsequent
-release — and include that edit in the following release.
+fully-qualified `owner/repo/path@ref`. They carry the moving alias of their own
+line: `@v1` on `main`, `@v2` on `v2.x`. That way a consumer pinned at `@v1` gets
+`setup-playwright` from `v1` too, and the refs need no touching on each release.
