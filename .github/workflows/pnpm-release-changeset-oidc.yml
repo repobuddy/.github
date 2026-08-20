@@ -81,7 +81,7 @@ jobs:
         run: pnpm install
 
       - name: Install playwright browsers
-        uses: repobuddy/.github/.github/actions/setup-playwright@v1
+        uses: repobuddy/.github/.github/actions/setup-playwright@v2
 
       - name: Install vsce
         run: pnpm install -g vsce
