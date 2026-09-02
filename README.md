@@ -287,22 +287,34 @@ and `v2` substituted.
 Step 3 is the one that is easy to get wrong or forget. If the alias is not
 moved, the release is invisible to everyone pinning it.
 
-#### Known gap: internal refs still float on `@main`
+#### Internal refs
 
 Workflows in this repo consume this repo's own composite action:
 
 ```text
-        uses: repobuddy/.github/.github/actions/setup-playwright@main
+        uses: repobuddy/.github/.github/actions/setup-playwright@v2
 ```
 
 A reusable workflow cannot reference a sibling action by relative path — `./`
 resolves against the *caller's* checkout, not this repo's — so these must be
-fully-qualified `owner/repo/path@ref`, and today that ref is `@main`. **A
-consumer pinned at `@v1` therefore still picks up `setup-playwright` from
-`main`,** which partially defeats the pin.
+fully-qualified `owner/repo/path@ref`. They carry the moving alias of their own
+line: `@v2` on `v2.x`. That way a consumer pinned at `@v2` gets
+`setup-playwright` from `v2` too, and the refs need no touching on each release.
 
-This is deliberately not fixed in the same change that introduces the scheme:
-re-pointing them to `@v1` before `v1` exists would break every current consumer
-immediately. Once `v1.0.0` is cut, change these to `@v1` on `main` and `@v2` on
-`v2.x` — the moving aliases, so they do not need touching on every subsequent
-release — and include that edit in the following release.
+### Playwright is optional
+
+`setup-playwright` probes whether the consuming repo can actually run Playwright
+(`pnpm exec playwright --version`, or the equivalent for the configured package
+manager) and skips the cache and install steps when it cannot. Repos with no
+browser tests therefore need no configuration.
+
+That probe used to run bare, so it exited 1 and killed the job for any consumer
+without Playwright — `verify` died after `pnpm install` and before ever running
+`pnpm verify`. Every other repo on these workflows is a visual-testing repo,
+which is why it went unnoticed until `repobuddy/jest-watch-toggle-config-2`
+adopted them.
+
+`pnpm-verify.yml` also takes `skip-playwright: true` to force-skip the step even
+when Playwright *is* installed. It is not needed for the "repo has no Playwright"
+case — detection covers that — and exists mainly for parity with
+`cyberuni/.github`'s input of the same name, since repos move between the orgs.
