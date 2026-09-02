@@ -20,6 +20,18 @@ on:
       codecov-flags:
         type: string
         required: false
+      # Force-skip the Playwright browser install.
+      #
+      # Not normally needed: `setup-playwright` detects whether the consuming repo can
+      # actually run Playwright and skips itself when it cannot, so a repo without
+      # browser tests needs no input at all. This exists for the case where the repo
+      # *does* have Playwright installed but this workflow should not spend time
+      # downloading browsers, and for parity with cyberuni/.github's input of the same
+      # name and semantics — repos move between the two orgs.
+      skip-playwright:
+        type: boolean
+        required: false
+        default: false
 jobs:
   verify:
     runs-on: ${{ matrix.os }}
@@ -40,7 +52,8 @@ jobs:
         run: pnpm install
 
       - name: Install playwright browsers
-        uses: repobuddy/.github/.github/actions/setup-playwright@main
+        if: inputs.skip-playwright == false
+        uses: repobuddy/.github/.github/actions/setup-playwright@v2
 
       - name: Verify
         if: matrix.os == 'ubuntu-latest'
