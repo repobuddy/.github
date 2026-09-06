@@ -6,7 +6,7 @@
 import { readFileSync, writeFileSync, appendFileSync, existsSync, readdirSync, statSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { gatePackage, render } from './publish-gate.mjs'
+import { gatePackage, loadAcks, render } from './publish-gate.mjs'
 
 const root = process.cwd()
 
@@ -47,11 +47,25 @@ function findPackages(dir, depth = 0, out = []) {
 	return out
 }
 
+// Load before walking. A malformed acknowledgement file is a hard stop for the whole
+// run, not a per-package failure — if the gate cannot read what has been approved it
+// cannot tell an approved dependency from an unapproved one for any package.
+let acks
+try {
+	acks = loadAcks(root)
+} catch (err) {
+	const msg = `## Publish gate\n\n**Result: blocked.**\n\n${String(err.message ?? err)}\n`
+	console.error(msg)
+	writeFileSync(join(root, 'publish-gate-report.md'), msg)
+	if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, msg)
+	process.exit(1)
+}
+
 const dirs = findPackages(root)
 const results = []
 for (const d of dirs) {
 	try {
-		const r = gatePackage(d)
+		const r = gatePackage(d, acks)
 		if (r) results.push(r)
 	} catch (err) {
 		// A package that cannot be inspected is not a pass. Surface it as a block
@@ -65,6 +79,8 @@ for (const d of dirs) {
 			fileDiff: null,
 			depDiff: null,
 			deps: {},
+			acknowledged: [],
+			staleAcks: [],
 		})
 	}
 }
