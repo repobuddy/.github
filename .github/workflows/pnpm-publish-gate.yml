@@ -20,7 +20,11 @@ name: pnpm-publish-gate
 #
 # Blocks on:
 #   - files that must never ship (tests, key material, env files, repo metadata)
-#   - new runtime `dependencies` that are not in the published version
+#   - new runtime `dependencies` that are not in the published version, unless the
+#     consuming repo acknowledges the specific dependency in `.github/publish-gate.json`
+#     (see the Publish gate section of this repo's README). There is no input to
+#     disable the gate: an ack names one dependency of one package and carries a
+#     written reason, so saying yes leaves a reviewable record.
 # Reports, without blocking:
 #   - any other change to the tarball file list
 #
