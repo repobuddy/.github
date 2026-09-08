@@ -107,24 +107,29 @@ stricter guarantee can opt into `@v1.0.0` individually.
 
 ### Why this matters more here than in most repos
 
-`main` in this repo is *not* hand-curated. `.mergify.yml` auto-merges Renovate
-PRs, so dependency bumps to the actions these workflows call land on `main`
-without a human in the loop — and under `@main` they reach every consumer the
-moment they merge.
+`main` in this repo is *not* hand-curated. Renovate merges its own bumps once
+CI is green, so dependency bumps to the actions these workflows call land on
+`main` without a human in the loop — and under `@main` they reach every
+consumer the moment they merge.
 
 That is not hypothetical. `changesets/action` v1 → **v2**, a major upgrade with
 renamed inputs and a hard CLI-version requirement, arrived as Renovate PR
 [#42](https://github.com/repobuddy/.github/pull/42) on branch
-`renovate/changesets-action-2.x` and was auto-merged. The Mergify rule intends
-to hold majors back with `head~=^(?!major-)`, but Renovate does not prefix these
-branches with `major-`, so the guard did not match and the major merged like any
-patch. The result was [#43](https://github.com/repobuddy/.github/issues/43):
-every consumer's release path broken at once, and none of them found out until
-the next release was attempted.
+`renovate/changesets-action-2.x` and was auto-merged. At the time merging ran
+through the org Mergify rules in `.mergify.yml`, whose major guard
+(`head~=^(?!major-)`) was meant to hold majors back — but Renovate names these
+branches `renovate/major-*`, which does not start with `major-`, so the guard
+never matched and the major merged like any patch. The result was
+[#43](https://github.com/repobuddy/.github/issues/43): every consumer's release
+path broken at once, and none of them found out until the next release was
+attempted.
 
 Tagging fixes the consumer half of this — an auto-merged bump now lands on
-`main` and waits there until someone cuts a release. The Mergify rule not
-actually excluding majors is a separate defect and should be fixed on its own.
+`main` and waits there until someone cuts a release. The guard itself is fixed
+in [#57](https://github.com/repobuddy/.github/issues/57): Mergify is retired
+org-wide and merging is Renovate `platformAutomerge` plus GitHub auto-merge,
+where majors are excluded by `matchUpdateTypes` in `.github/renovate.json`
+rather than by a branch-name regex that never matched.
 
 It kept happening after the lines were split: Renovate carried `main` on to
 `changesets/action` `v2`, `v2.1.0` and `v2.1.1` while `main` is the v1 line, so
