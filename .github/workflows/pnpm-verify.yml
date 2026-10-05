@@ -74,6 +74,8 @@ jobs:
       - name: codecov
         if: matrix.os == 'ubuntu-latest' && matrix.node-version == 'lts/*'
         uses: codecov/codecov-action@v7
+        # A coverage upload must never fail CI: the tests are the gate.
+        continue-on-error: true
         with:
           flags: ${{ inputs.codecov-flags }}
 
