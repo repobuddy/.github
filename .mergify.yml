@@ -1,25 +1,20 @@
-pull_request_rules:
-  - name: automatic merge for Dependabot pull requests
-    conditions:
-      - author~=^dependabot(|-preview)\[bot\]$
-      - title~=bump [^\s]+ from ([\d]+)\..+ to ([\d]+)\.
-    actions:
-      merge:
-        method: rebase
-  - name: automatic merge for Renovate pull requests
-    conditions:
-      - author=renovate[bot]
-      - and:
-          - head~=^(?!major-)
-          - -title~=update dependency @types\/node
-    actions:
-      merge:
-        method: rebase
-  - name: automatic merge for Snyk pull requests
-    conditions:
-      - title~=^\[Snyk\]
-      - head~=^snyk-fix
-      - check-success~=^security/snyk
-    actions:
-      merge:
-        method: rebase
+# Deliberately empty. Mergify no longer merges anything in this org.
+#
+# Renovate `platformAutomerge` plus GitHub auto-merge is the single merge
+# mechanism, because both respect a repo's required status checks. The rules
+# that used to live here did not: they merged *any* Dependabot, Renovate or
+# Snyk pull request with `method: rebase` and no check conditions of their own.
+#
+# The major guard never worked either. `head~=^(?!major-)` was meant to hold
+# majors back, but Renovate names its branches `renovate/major-*`, which does
+# not start with `major-`, so the guard never matched. That is how
+# `changesets/action` v1 -> v2 auto-merged here (#43, every consumer's release
+# path broken at once), and how `npm-check-updates` v23 and `actions/checkout`
+# v7 landed in repobuddy/jest-watch-repeat.
+#
+# `method: rebase` was a second defect: repos with `allow_rebase_merge: false`
+# could never satisfy it.
+#
+# The file stays, empty, so that any repo still carrying `extends: .github`
+# resolves to no rules rather than to a config error. See #57.
+pull_request_rules: []

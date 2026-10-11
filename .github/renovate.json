@@ -2,6 +2,7 @@
   "extends": [
     "github>unional/renovate-preset"
   ],
+  "platformAutomerge": true,
   "packageRules": [
     {
       "description": "changesets/action's major is the v1/v2 line boundary, not a dependency bump. Moving it is a deliberate release decision made alongside the consumers' @changesets/cli major. See README 'Why there are two lines'.",
@@ -9,6 +10,17 @@
       "matchDepNames": ["changesets/action"],
       "matchUpdateTypes": ["major"],
       "enabled": false
+    },
+    {
+      "description": "Action bumps merge themselves once CI is green. This replaces the org Mergify rule removed in #57; unlike that rule, `matchUpdateTypes` actually excludes majors.",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "automerge": true
+    },
+    {
+      "description": "Majors reach every consumer pinned to a moving major alias the moment they land, so they stay a human decision.",
+      "matchUpdateTypes": ["major"],
+      "automerge": false
     }
   ]
 }
