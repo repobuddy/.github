@@ -2,12 +2,15 @@ name: pnpm-release-changeset-oidc
 # Secretless variant of pnpm-release-changeset.yml.
 #
 # Differences from that workflow:
-#   - No CI_GITHUB_TOKEN. Uses the built-in GITHUB_TOKEN with elevated `permissions`.
-#     Trade-off: a PR opened with GITHUB_TOKEN does not trigger `on: pull_request`
-#     workflows, so the "version packages" PR gets no status checks. That is already the
-#     case across this org — every consumer's pull-request.yml carries
-#     `branches-ignore: ['changeset-release/*']` — so adopting this costs nothing that
-#     was not already given up deliberately.
+#   - No CI_GITHUB_TOKEN. The "version packages" PR is opened with a repobuddy GitHub
+#     App token when the caller passes RELEASE_APP_ID and RELEASE_APP_PRIVATE_KEY. A PR
+#     opened with GITHUB_TOKEN does not trigger `on: pull_request` workflows, so its
+#     required checks never report and it can only be merged by an admin; the app token
+#     does trigger them. An app key does not expire, so there is still nothing to rotate.
+#     Without those secrets the job falls back to the built-in GITHUB_TOKEN with elevated
+#     `permissions`, and the org must allow GitHub Actions to create pull requests.
+#     Consumers whose pull-request.yml carries `branches-ignore: ['changeset-release/*']`
+#     still skip those checks until they drop that filter.
 #   - No NPM_TOKEN. Publishes via npm trusted publishing (OIDC), which also emits
 #     provenance attestations. Each package must have a trusted publisher registered at
 #     npmjs.com/package/<name>/access naming the repo and the *caller* workflow's
@@ -36,6 +39,11 @@ on:
         type: string
         required: false
         default: '24'
+    secrets:
+      RELEASE_APP_ID:
+        required: false
+      RELEASE_APP_PRIVATE_KEY:
+        required: false
     outputs:
       published:
         description: 'Whether the release was published'
@@ -55,13 +63,24 @@ jobs:
   release:
     runs-on: ubuntu-latest
     env:
+      HAS_RELEASE_APP: ${{ secrets.RELEASE_APP_ID != '' && secrets.RELEASE_APP_PRIVATE_KEY != '' }}
       PLAYWRIGHT_PATH: ~/.cache/ms-playwright
     outputs:
       published: ${{ steps.changesets.outputs.published }}
     steps:
+      - uses: actions/create-github-app-token@v3
+        if: env.HAS_RELEASE_APP == 'true'
+        id: app-token
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      # The version branch is pushed with the checkout's credentials, so the app token
+      # goes here too; otherwise the push would not re-trigger the PR's checks.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token || github.token }}
 
       - uses: pnpm/action-setup@v6
 
@@ -97,4 +116,4 @@ jobs:
           version: pnpm run version
           publish: pnpm run release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}

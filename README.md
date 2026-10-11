@@ -187,7 +187,7 @@ they authenticate.
 | Workflow | GitHub auth | npm auth |
 | --- | --- | --- |
 | `pnpm-release-changeset.yml` | `CI_GITHUB_TOKEN` | `NPM_TOKEN` |
-| `pnpm-release-changeset-oidc.yml` | built-in `GITHUB_TOKEN` | trusted publishing (OIDC) |
+| `pnpm-release-changeset-oidc.yml` | repobuddy App token, else built-in `GITHUB_TOKEN` | trusted publishing (OIDC) |
 
 **Prefer the OIDC variant for new repos, and migrate existing ones.** Both
 tokens are long-lived credentials that expire silently and are worth stealing;
@@ -213,17 +213,24 @@ emits provenance attestations.
        id-token: write
        contents: write
        pull-requests: write
+     secrets:
+       RELEASE_APP_ID: ${{ secrets.RELEASE_APP_ID }}
+       RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
    ```
+
+   The two `secrets:` lines are optional. With them, the workflow opens the
+   "version packages" PR with a repobuddy GitHub App token. Without them, it
+   falls back to the built-in `GITHUB_TOKEN`.
 
 4. Once a release has published successfully, delete `NPM_TOKEN` and
    `CI_GITHUB_TOKEN` from the repo's secrets.
 
-Known trade-off: a PR opened with `GITHUB_TOKEN` does not trigger
+Why the App token: a PR opened with `GITHUB_TOKEN` does not trigger
 `on: pull_request` workflows, so the "version packages" PR gets no status
-checks. Every consumer in this org already suppresses those checks explicitly
-(`branches-ignore: ['changeset-release/*']`), so this costs nothing that was not
-already given up deliberately. Repos that want checks there should adopt a merge
-queue with a `merge_group:` trigger rather than reintroduce a PAT.
+checks and can only be merged by an admin. A PR opened with the App token does
+trigger them, and an App key does not expire. A consumer whose
+`pull-request.yml` carries `branches-ignore: ['changeset-release/*']` still
+skips those checks until it drops that filter.
 
 ### Will Renovate keep consumer pins current?
 
