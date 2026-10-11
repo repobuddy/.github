@@ -216,25 +216,29 @@ emits provenance attestations.
        actions: write
    ```
 
-   `actions: write` lets the workflow start your CI on the "version packages"
-   PR (see below). If your CI workflow is not `pull-request.yml`, pass its file
-   name as `with: ci-workflow: <file>`.
+   `actions: write` lets the workflow approve the runs GitHub parks on the
+   "version packages" PR (see below). Without it, the release still succeeds,
+   but it warns and the PR's runs stay pending.
 
-4. Add `workflow_dispatch:` to the `on:` block of your CI workflow. Without it,
-   the release still succeeds, but it warns and the "version packages" PR gets
-   no checks.
+4. Your CI workflow no longer needs `workflow_dispatch:` in its `on:` block.
+   An earlier version of this workflow dispatched CI that way; leaving the
+   trigger in place is harmless.
 5. Once a release has published successfully, delete `NPM_TOKEN` and
    `CI_GITHUB_TOKEN` from the repo's secrets.
 
-Why the dispatch: GitHub starts no workflows for events that `GITHUB_TOKEN`
-causes, so opening or pushing the "version packages" PR does not run
-`on: pull_request` CI, and a ruleset that requires its checks leaves the PR
-blocked. `workflow_dispatch` is the one event `GITHUB_TOKEN` may trigger, so
-after changesets/action opens or updates the PR, the workflow runs
-`gh workflow run <ci-workflow> --ref changeset-release/<branch>`. The check
-runs attach to the branch head under the GitHub Actions app and satisfy the
-required check by name. A GitHub App token would also work, but it needs a
-long-lived private key in org secrets; the dispatch needs no stored secret.
+Why the approval: changesets/action opens and pushes the "version packages" PR
+with `GITHUB_TOKEN`, so the PR's author is `github-actions[bot]`. GitHub creates
+the PR's `on: pull_request` runs (CI, CodeQL) but parks them as
+`action_required` until someone approves them, and a ruleset that requires
+their checks leaves the PR blocked. After changesets/action opens or updates the
+PR, the workflow finds the parked runs on the branch head, waiting up to about
+60 seconds for GitHub to create them, and approves each one through
+`POST /repos/{owner}/{repo}/actions/runs/{run_id}/approve`. The runs then
+execute against the PR, so every required check reports, the CodeQL
+code-scanning result included. The earlier `workflow_dispatch` approach
+satisfied the CI check but never produced the CodeQL result. A GitHub App token
+would also work, but it needs a long-lived private key in org secrets; the
+approval needs no stored secret.
 
 ### Will Renovate keep consumer pins current?
 
