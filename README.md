@@ -180,7 +180,7 @@ they authenticate.
 | Workflow | GitHub auth | npm auth |
 | --- | --- | --- |
 | `pnpm-release-changeset.yml` | `CI_GITHUB_TOKEN` | `NPM_TOKEN` |
-| `pnpm-release-changeset-oidc.yml` | repobuddy App token, else built-in `GITHUB_TOKEN` | trusted publishing (OIDC) |
+| `pnpm-release-changeset-oidc.yml` | built-in `GITHUB_TOKEN` | trusted publishing (OIDC) |
 
 **Prefer the OIDC variant for new repos, and migrate existing ones.** Both
 tokens are long-lived credentials that expire silently and are worth stealing;
@@ -206,24 +206,28 @@ emits provenance attestations.
        id-token: write
        contents: write
        pull-requests: write
-     secrets:
-       RELEASE_APP_ID: ${{ secrets.RELEASE_APP_ID }}
-       RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+       actions: write
    ```
 
-   The two `secrets:` lines are optional. With them, the workflow opens the
-   "version packages" PR with a repobuddy GitHub App token. Without them, it
-   falls back to the built-in `GITHUB_TOKEN`.
+   `actions: write` lets the workflow start your CI on the "version packages"
+   PR (see below). If your CI workflow is not `pull-request.yml`, pass its file
+   name as `with: ci-workflow: <file>`.
 
-4. Once a release has published successfully, delete `NPM_TOKEN` and
+4. Add `workflow_dispatch:` to the `on:` block of your CI workflow. Without it,
+   the release still succeeds, but it warns and the "version packages" PR gets
+   no checks.
+5. Once a release has published successfully, delete `NPM_TOKEN` and
    `CI_GITHUB_TOKEN` from the repo's secrets.
 
-Why the App token: a PR opened with `GITHUB_TOKEN` does not trigger
-`on: pull_request` workflows, so the "version packages" PR gets no status
-checks and can only be merged by an admin. A PR opened with the App token does
-trigger them, and an App key does not expire. A consumer whose
-`pull-request.yml` carries `branches-ignore: ['changeset-release/*']` still
-skips those checks until it drops that filter.
+Why the dispatch: GitHub starts no workflows for events that `GITHUB_TOKEN`
+causes, so opening or pushing the "version packages" PR does not run
+`on: pull_request` CI, and a ruleset that requires its checks leaves the PR
+blocked. `workflow_dispatch` is the one event `GITHUB_TOKEN` may trigger, so
+after changesets/action opens or updates the PR, the workflow runs
+`gh workflow run <ci-workflow> --ref changeset-release/<branch>`. The check
+runs attach to the branch head under the GitHub Actions app and satisfy the
+required check by name. A GitHub App token would also work, but it needs a
+long-lived private key in org secrets; the dispatch needs no stored secret.
 
 ### Will Renovate keep consumer pins current?
 
@@ -341,9 +345,6 @@ publish-gate:
 release:
   uses: repobuddy/.github/.github/workflows/pnpm-release-changeset-oidc.yml@v2
   needs: [code, publish-gate]
-  secrets:
-    RELEASE_APP_ID: ${{ secrets.RELEASE_APP_ID }}
-    RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 ```
 
 It **blocks** on files that must never ship (tests, key material, env files, repo
