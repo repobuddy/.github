@@ -105,7 +105,7 @@ jobs:
       # No .npmrc token step: the OIDC exchange supplies credentials at publish time.
       - name: Create Release Pull Request or Publish to npm
         id: changesets
-        uses: changesets/action@v2.0.0
+        uses: changesets/action@v2.1.2
         with:
           commit-message: 'chore: version packages'
           version-script: pnpm run version
