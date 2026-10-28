@@ -53,11 +53,13 @@ jobs:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Create Release Pull Request or Publish to npm
         id: changesets
-        uses: changesets/action@v1
+        uses: changesets/action@v2
         with:
-          commit: 'chore: version packages'
-          version: pnpm run version
-          publish: pnpm run release
+          github-token: ${{ secrets.CI_GITHUB_TOKEN }}
+          push-with-git-cli: true
+          commit-message: 'chore: version packages'
+          version-script: pnpm run version
+          publish-script: pnpm run release
         env:
           GITHUB_TOKEN: ${{ secrets.CI_GITHUB_TOKEN }}
           NPM_TOKEN: ''

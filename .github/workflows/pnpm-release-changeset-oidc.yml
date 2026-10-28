@@ -41,10 +41,10 @@ name: pnpm-release-changeset-oidc
 # NPM_TOKEN is the kind of failure nobody notices until a release has been missing from
 # the registry for months. OIDC credentials are minted per run and last minutes.
 #
-# This is the v1 line, so it pairs changesets/action@v1 with @changesets/cli v2. The
-# pairing is strict and enforced by the action itself: action v2 refuses to run against
-# CLI v2, and directs you here. Consumers on @changesets/cli v3 want the v2 tag of this
-# repo instead. See README "What counts as breaking".
+# This pairs changesets/action@v2 with @changesets/cli v3. The pairing is strict and
+# enforced by the action itself: action v2 refuses to run against CLI v2. Consumers still
+# on @changesets/cli v2 want the v1 tag of this repo instead. See README "Why there are
+# two lines".
 #
 # Added alongside pnpm-release-changeset.yml rather than replacing it, so repos that have
 # not registered trusted publishers keep working.
@@ -105,11 +105,13 @@ jobs:
       # No .npmrc token step: the OIDC exchange supplies credentials at publish time.
       - name: Create Release Pull Request or Publish to npm
         id: changesets
-        uses: changesets/action@v1
+        uses: changesets/action@v2
         with:
-          commit: 'chore: version packages'
-          version: pnpm run version
-          publish: pnpm run release
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          push-with-git-cli: true
+          commit-message: 'chore: version packages'
+          version-script: pnpm run version
+          publish-script: pnpm run release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -118,7 +120,7 @@ jobs:
       # Approve them so they run against the PR; see the header. A failed approval warns
       # rather than failing an otherwise good release.
       - name: Approve the version packages PR's pending runs
-        if: steps.changesets.outputs.pullRequestNumber != '' && steps.changesets.outputs.published != 'true'
+        if: steps.changesets.outputs.pr-number != '' && steps.changesets.outputs.published != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION_BRANCH: changeset-release/${{ github.ref_name }}

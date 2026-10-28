@@ -60,23 +60,14 @@ action is designed to work with Changesets CLI v3. Changesets CLI v2 is not
 supported; use Changesets action v1 instead."* There is no configuration that
 makes one workflow serve both.
 
-Consumers are split across both CLI majors and will be for a while, so the two
-lines exist in parallel rather than one being a migration deadline:
+Every consumer is now on `@changesets/cli` v3 (all but `repobuddy/storybook` pin `@v2`; it pins `@main`), so `main` carries
+the v2 line: `pnpm-release-changeset*.yml` here uses `changesets/action@v2` with
+`push-with-git-cli: true`, which keeps the release commit and tags pushed by the
+Git CLI with the same token and permissions as before. The `@v1` tag still points
+at the last release of the v1 line for any repo that returns to CLI v2.
 
-| Repo | `@changesets/cli` | Pin |
-| --- | --- | --- |
-| `repobuddy/repobuddy` | `^3.0.0` | `@v2` |
-| `repobuddy/storybook` | `^2.29.7` | `@v1` |
-| `repobuddy/visual-testing` | `^3.0.0` | `@v2` |
-| `repobuddy/rolldown-inline-type-exports` | `^2.29.8` | `@v1` |
-| `repobuddy/jest-watch-toggle-config-2` | `^2.25.2` | `@v1` |
-
-**Branch layout:** `main` is the v1 line. The v2 line lives on the `v2.x`
-branch. A fix that applies to both is made on `main` and cherry-picked to
-`v2.x`; the two differ only in the `changesets/action` ref and its input names.
-
-When the last consumer reaches CLI v3, `v2.x` can be merged down into `main` and
-the v1 line retired.
+The `v2.x` branch carries the v2 line's unreleased differences (such as the
+publish gate). Merge it down into `main` when the v2 line is next released.
 
 ### The scheme
 
