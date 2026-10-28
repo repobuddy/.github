@@ -42,7 +42,8 @@ If you need a ref that never moves under you, pin the exact version instead
 
 Do **not** pin `@main`. `main` is the development branch: it carries unreleased
 and possibly broken work, and every consumer on it takes every change the
-instant it merges. That is how a silently-broken release path reached five repos
+instant it merges. That is how a silently-broken release path reached all four
+consumers at once
 ([#43](https://github.com/repobuddy/.github/issues/43)).
 
 ### Why there are two lines
@@ -68,7 +69,6 @@ lines exist in parallel rather than one being a migration deadline:
 | `repobuddy/repobuddy` | `^3.0.0` | `@v2` |
 | `repobuddy/storybook` | `^2.29.7` | `@v1` |
 | `repobuddy/visual-testing` | `^2.29.8` | `@v1` |
-| `repobuddy/rolldown-inline-type-exports` | `^2.29.8` | `@v1` |
 | `repobuddy/jest-watch-toggle-config-2` | `^2.25.2` | `@v1` |
 
 **Branch layout:** `main` is the v1 line. The v2 line lives on the `v2.x`
@@ -130,7 +130,7 @@ actually excluding majors is a separate defect and should be fixed on its own.
 
 Not `v0.x`. Two reasons:
 
-1. These workflows are already in production use by five repos and have been
+1. These workflows are already in production use by four repos and have been
    for a long time. `v0.x` would advertise "expect this to break", which is a
    less honest description of the status quo than `v1` — and `@main` offered no
    stability guarantee whatsoever, so anything we tag is an improvement rather
