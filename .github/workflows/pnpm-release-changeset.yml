@@ -56,7 +56,7 @@ jobs:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Create Release Pull Request or Publish to npm
         id: changesets
-        uses: changesets/action@v2.0.0
+        uses: changesets/action@v2.1.2
         with:
           github-token: ${{ secrets.CI_GITHUB_TOKEN }}
           commit-message: 'chore: version packages'
