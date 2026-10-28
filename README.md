@@ -67,7 +67,7 @@ lines exist in parallel rather than one being a migration deadline:
 | --- | --- | --- |
 | `repobuddy/repobuddy` | `^3.0.0` | `@v2` |
 | `repobuddy/storybook` | `^2.29.7` | `@v1` |
-| `repobuddy/visual-testing` | `^3.0.0` | `@v2` |
+| `repobuddy/visual-testing` | `^2.29.8` | `@v1` |
 | `repobuddy/rolldown-inline-type-exports` | `^2.29.8` | `@v1` |
 | `repobuddy/jest-watch-toggle-config-2` | `^2.25.2` | `@v1` |
 
@@ -125,13 +125,6 @@ the next release was attempted.
 Tagging fixes the consumer half of this — an auto-merged bump now lands on
 `main` and waits there until someone cuts a release. The Mergify rule not
 actually excluding majors is a separate defect and should be fixed on its own.
-
-It kept happening after the lines were split: Renovate carried `main` on to
-`changesets/action` `v2`, `v2.1.0` and `v2.1.1` while `main` is the v1 line, so
-the v1 workflows ran action v2 against v1 input names and every release on that
-line aborted with *"The following inputs have been renamed"*. `.github/renovate.json`
-now disables major updates for `changesets/action` outright, because that major
-is the line boundary — it is moved by cutting a new line, never by a bump.
 
 ### Starting version: `v1.0.0`
 
@@ -314,11 +307,90 @@ moved, the release is invisible to everyone pinning it.
 Workflows in this repo consume this repo's own composite action:
 
 ```text
-        uses: repobuddy/.github/.github/actions/setup-playwright@v1
+        uses: repobuddy/.github/.github/actions/setup-playwright@v2
 ```
 
 A reusable workflow cannot reference a sibling action by relative path — `./`
 resolves against the *caller's* checkout, not this repo's — so these must be
 fully-qualified `owner/repo/path@ref`. They carry the moving alias of their own
-line: `@v1` on `main`, `@v2` on `v2.x`. That way a consumer pinned at `@v1` gets
-`setup-playwright` from `v1` too, and the refs need no touching on each release.
+line: `@v2` on `v2.x`. That way a consumer pinned at `@v2` gets
+`setup-playwright` from `v2` too, and the refs need no touching on each release.
+
+### Playwright is optional
+
+`setup-playwright` probes whether the consuming repo can actually run Playwright
+(`pnpm exec playwright --version`, or the equivalent for the configured package
+manager) and skips the cache and install steps when it cannot. Repos with no
+browser tests therefore need no configuration.
+
+That probe used to run bare, so it exited 1 and killed the job for any consumer
+without Playwright — `verify` died after `pnpm install` and before ever running
+`pnpm verify`. Every other repo on these workflows is a visual-testing repo,
+which is why it went unnoticed until `repobuddy/jest-watch-toggle-config-2`
+adopted them.
+
+`pnpm-verify.yml` also takes `skip-playwright: true` to force-skip the step even
+when Playwright *is* installed. It is not needed for the "repo has no Playwright"
+case — detection covers that — and exists mainly for parity with
+`cyberuni/.github`'s input of the same name, since repos move between the orgs.
+
+## Publish gate
+
+`pnpm-publish-gate.yml` packs each publishable package from the working tree and
+diffs it against what is already on the registry. Call it as a `needs:` of the
+release job so it runs immediately before `changeset publish`:
+
+```yaml
+publish-gate:
+  uses: repobuddy/.github/.github/workflows/pnpm-publish-gate.yml@v2
+  permissions:
+    contents: read
+
+release:
+  uses: repobuddy/.github/.github/workflows/pnpm-release-changeset-oidc.yml@v2
+  needs: [code, publish-gate]
+```
+
+It **blocks** on files that must never ship (tests, key material, env files, repo
+metadata) and on new runtime `dependencies` absent from the published version. It
+**reports without blocking** on removed dependencies and ordinary file churn —
+failing on those would train maintainers to ignore the gate.
+
+### Acknowledging a new dependency
+
+A new runtime dependency blocks by default, because that is the shape a
+compromised release takes. But legitimate releases add dependencies too, so
+there is a way to say yes that is not "turn the gate off":
+`.github/publish-gate.json`, in the consuming repo.
+
+```json
+{
+  "acknowledgedDependencies": {
+    "eslint-plugin-harmony": {
+      "@typescript-eslint/utils": "Replaces @typescript-eslint/experimental-utils, which its own maintainers deprecated and renamed. Same publisher, same role."
+    }
+  }
+}
+```
+
+The ack is reviewed in the same pull request that adds the dependency, by the
+same people — which is the only place the question can actually be answered.
+
+Deliberately narrow, and it fails closed:
+
+- an ack names **one** dependency of **one** package; wildcards are rejected
+- the reason is **required** and must be non-empty. An ack with no reason records
+  that somebody wanted the gate quiet, not that anybody judged the dependency safe
+- an ack for a dependency that is not the one being added does nothing
+- an unparseable or malformed file **blocks the entire run**, rather than
+  degrading to permissive
+- acknowledged dependencies are printed in the report with their reasons, so an
+  ack is visible in the job summary rather than silent
+
+Once the dependency ships it becomes part of the published baseline and no longer
+diffs as new, so the ack is inert. The gate lists those as stale and safe to
+delete, so the file does not accumulate permanent exemptions.
+
+There is no input to disable the gate. If you need to publish something the gate
+refuses, fix the package or acknowledge the specific dependency — the two paths
+that leave a record.
