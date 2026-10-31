@@ -60,23 +60,10 @@ action is designed to work with Changesets CLI v3. Changesets CLI v2 is not
 supported; use Changesets action v1 instead."* There is no configuration that
 makes one workflow serve both.
 
-Consumers are split across both CLI majors and will be for a while, so the two
-lines exist in parallel rather than one being a migration deadline:
-
-| Repo | `@changesets/cli` | Pin |
-| --- | --- | --- |
-| `repobuddy/repobuddy` | `^3.0.0` | `@v2` |
-| `repobuddy/storybook` | `^2.29.7` | `@v1` |
-| `repobuddy/visual-testing` | `^2.29.8` | `@v1` |
-| `repobuddy/rolldown-inline-type-exports` | `^2.29.8` | `@v1` |
-| `repobuddy/jest-watch-toggle-config-2` | `^2.25.2` | `@v1` |
-
-**Branch layout:** `main` is the v1 line. The v2 line lives on the `v2.x`
-branch. A fix that applies to both is made on `main` and cherry-picked to
-`v2.x`; the two differ only in the `changesets/action` ref and its input names.
-
-When the last consumer reaches CLI v3, `v2.x` can be merged down into `main` and
-the v1 line retired.
+Every consumer is on `@changesets/cli` v3, so `main` is the v2 line and
+`pnpm-release-changeset*.yml` uses `changesets/action@v2`. The `v1` tag stays at
+the last v1 release for any repo that returns to CLI v2; nothing is developed
+against it.
 
 ### The scheme
 
@@ -279,25 +266,22 @@ Two config problems found while checking, neither blocking:
 Manual. This repo is tagged rarely, and a release workflow for that cadence is
 scaffolding that needs its own maintenance.
 
-For the **v1 line** (from `main`):
+Releases are cut from `main`. Shown here for `v2.3.0`; substitute the next version:
 
 ```bash
 # 1. From the merge commit you intend to release:
 git checkout main && git pull
 
 # 2. Immutable version tag + release notes.
-git tag -a v1.0.0 -m "v1.0.0"
-git push origin v1.0.0
-gh release create v1.0.0 --generate-notes
+git tag -a v2.3.0 -m "v2.3.0"
+git push origin v2.3.0
+gh release create v2.3.0 --generate-notes
 
 # 3. Move the major alias forward. -f on both sides is required: the tag
 #    already exists and is intentionally being re-pointed.
-git tag -f v1 v1.0.0
-git push -f origin v1
+git tag -f v2 v2.3.0
+git push -f origin v2
 ```
-
-For the **v2 line**, the same three steps from the `v2.x` branch with `v2.0.0`
-and `v2` substituted.
 
 Step 3 is the one that is easy to get wrong or forget. If the alias is not
 moved, the release is invisible to everyone pinning it.
@@ -313,7 +297,7 @@ Workflows in this repo consume this repo's own composite action:
 A reusable workflow cannot reference a sibling action by relative path — `./`
 resolves against the *caller's* checkout, not this repo's — so these must be
 fully-qualified `owner/repo/path@ref`. They carry the moving alias of their own
-line: `@v2` on `v2.x`. That way a consumer pinned at `@v2` gets
+line: `@v2`. That way a consumer pinned at `@v2` gets
 `setup-playwright` from `v2` too, and the refs need no touching on each release.
 
 ### Playwright is optional
