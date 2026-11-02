@@ -41,8 +41,9 @@ name: pnpm-publish-gate
 #     call signature matches cyberuni's copy and repos can move between orgs without
 #     editing their caller. Worth fixing across all four workflows at once, not here.
 #   - the script checkout pins `ref: v2` rather than a branch, because this repo's
-#     release lines live on tags: `main` is the v1 line and `v2.x`/`v2` is the v2 line.
-#     Checking out `main` here would pull v1-line scripts into a v2-line run.
+#     release lines live on tags: `v2` is the released v2 line and `main` is its
+#     unreleased development. Checking out `main` here would pull unreleased scripts
+#     into a released run.
 on:
   workflow_call:
     inputs:
