@@ -321,7 +321,11 @@ case — detection covers that — and exists mainly for parity with
 ## Publish gate
 
 `pnpm-publish-gate.yml` packs each publishable package from the working tree and
-diffs it against what is already on the registry. Call it as a `needs:` of the
+diffs it against what is already on the registry. It lists the files with the tool
+that will publish them: `pnpm pack` when the repo uses pnpm (a `pnpm@` value in the
+root `packageManager` field, or a root `pnpm-lock.yaml`), `npm pack` otherwise. The
+two pack differently — pnpm copies the workspace root's LICENSE into a package that
+has none, npm does not — so listing with the wrong one reports false changes. Call it as a `needs:` of the
 release job so it runs immediately before `changeset publish`:
 
 ```yaml

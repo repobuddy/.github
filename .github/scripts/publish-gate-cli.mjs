@@ -6,7 +6,7 @@
 import { readFileSync, writeFileSync, appendFileSync, existsSync, readdirSync, statSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { gatePackage, loadAcks, render } from './publish-gate.mjs'
+import { detectPackManager, gatePackage, loadAcks, render } from './publish-gate.mjs'
 
 const root = process.cwd()
 
@@ -61,11 +61,15 @@ try {
 	process.exit(1)
 }
 
+// Decided once, at the root: a workspace has one package manager, and the root is
+// where its `packageManager` field and lockfile live.
+const packManager = detectPackManager(root)
+
 const dirs = findPackages(root)
 const results = []
 for (const d of dirs) {
 	try {
-		const r = gatePackage(d, acks)
+		const r = gatePackage(d, acks, { packManager })
 		if (r) results.push(r)
 	} catch (err) {
 		// A package that cannot be inspected is not a pass. Surface it as a block
