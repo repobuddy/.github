@@ -5,7 +5,10 @@ name: pnpm-publish-gate
 # Call this from `release.yml` as a `needs:` of the release job, so it runs on the
 # default branch immediately before `changeset publish`. The gate is self-contained —
 # it packs the working tree and diffs that against the registry — so it needs no PR
-# context and works anywhere the built workspace exists.
+# context and works anywhere the built workspace exists. It packs with pnpm when the
+# repo uses pnpm and with npm otherwise, matching the tool `changeset publish` uses:
+# the two produce different tarballs, so listing with the wrong one reports false
+# changes on every release.
 #
 # It used to be documented as a job on the changesets "Version Packages" PR, on the
 # argument that the PR is the last point where the release contents are both knowable
@@ -89,8 +92,9 @@ jobs:
       - name: Install Dependencies
         run: pnpm install
 
-      # npm pack reports what would ship from the working tree, so the build output
-      # has to exist or the gate inspects an empty package and calls it clean.
+      # The gate lists what would ship from the working tree with `pnpm pack` (or
+      # `npm pack` in a repo without pnpm), so the build output has to exist or the
+      # gate inspects an empty package and calls it clean.
       - name: Build
         if: inputs.build
         run: pnpm build
