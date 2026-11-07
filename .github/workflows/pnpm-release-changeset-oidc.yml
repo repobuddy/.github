@@ -86,6 +86,13 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       # Trusted publishing requires npm 11.5.1+. Node LTS may ship an older npm.
+      #
+      # npm@latest is npm 12, which wraps `npm info --json` output in an array.
+      # @changesets/cli v2 reads that array as "no versions published" and tries to
+      # republish them, failing with E403 (changesets/changesets#2164). CLI v3, which
+      # this line requires, unwraps the array, and in a pnpm repo asks `pnpm info`
+      # instead. So npm 12 is safe here: a caller on CLI v2 cannot publish through
+      # this workflow at all, because changesets/action v2 refuses to run against it.
       - name: Ensure npm supports trusted publishing
         run: |
           npm install -g npm@latest
