@@ -19,6 +19,11 @@
 // It is deliberately narrow. An ack covers one dependency of one package, never a
 // wildcard and never "skip the gate". An ack with no reason is not an ack, and an
 // unparseable config blocks rather than degrading to permissive.
+//
+// The owner's own packages are a second, broader way through: a new dependency on one
+// of `FIRST_PARTY` is reported under its own heading instead of blocking, and callers
+// extend that list with the workflow's `allowed-new-dependencies` input. Both paths
+// report what they let through, so nothing passes silently.
 import { execFileSync } from 'node:child_process'
 import { readFileSync, existsSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -34,6 +39,59 @@ const RISKY = [
 	{ re: /(^|\/)\.git(hub|ignore|attributes)?\//i, why: 'repo metadata' },
 	{ re: /(^|\/)id_(rsa|ed25519)/i, why: 'ssh key' },
 ]
+
+// Packages the owner publishes. A new runtime dependency on one of these is a
+// deliberate move within the owner's own graph, not a supply-chain surprise, so it is
+// reported under its own heading instead of blocking. Precedent: type-plus 8 dropped
+// its `unpartial` export, and standard-log's release was blocked for depending on the
+// owner's own `unpartial` package instead.
+//
+// This is the one place the list lives. Callers extend it with the workflow's
+// `allowed-new-dependencies` input; they cannot shrink it.
+export const FIRST_PARTY = [
+	'@unional/*',
+	'@repobuddy/*',
+	'@just-web/*',
+	'@just-func/*',
+	'@mocktomata/*',
+	'@cyberuni/*',
+	'type-plus',
+	'unpartial',
+	'tersify',
+	'satisfier',
+	'assertron',
+	'iso-error',
+	'iso-error-web',
+	'google-cloud-api',
+	'standard-log',
+	'standard-log-color',
+	'async-fp',
+	'just-func',
+	'clibuilder',
+	'mocktomata',
+	'progress-str',
+	'fsa-emitter',
+	'global-store',
+	'stable-store',
+]
+
+// Accepts a newline- or comma-separated list of exact package names and `@scope/*`
+// patterns. Anything else containing `*` throws: a stray `*` or `foo-*` would quietly
+// let arbitrary packages through, and a misconfigured gate should fail loudly.
+export function parseAllowList(text) {
+	const entries = (text ?? '')
+		.split(/[\n,]/)
+		.map((s) => s.trim())
+		.filter(Boolean)
+	for (const e of entries) {
+		if (e.includes('*') && !/^@[^/*]+\/\*$/.test(e)) throw new Error(`invalid allow-list entry \`${e}\`: use an exact package name or \`@scope/*\``)
+	}
+	return entries
+}
+
+export function isAllowed(name, allowList) {
+	return allowList.some((p) => (p.endsWith('/*') ? name.startsWith(p.slice(0, -1)) : name === p))
+}
 
 // Reads the acknowledgement file. Returns a map of package name -> { dep: reason }.
 //
@@ -219,7 +277,10 @@ export function gatePackage(dir, acks = {}, root = process.cwd()) {
 	return { name: pkg.name, version: pkg.version, publishedVersion: pub?.version ?? null, files, risky, fileDiff, depDiff, deps, acknowledged, staleAcks }
 }
 
-export function render(results) {
+// `allow` is the allow-list: `FIRST_PARTY` plus the caller's extra entries. It applies
+// only to dependencies `.github/publish-gate.json` did not already acknowledge; an ack
+// is the narrower record and is reported with its reason.
+export function render(results, { allow = FIRST_PARTY } = {}) {
 	const lines = []
 	let failed = false
 
@@ -233,10 +294,21 @@ export function render(results) {
 			lines.push('')
 		}
 
-		if (r.depDiff?.added.length) {
+		const addedDeps = r.depDiff?.added ?? []
+		const blockedDeps = addedDeps.filter((d) => !isAllowed(d, allow))
+		const allowedDeps = addedDeps.filter((d) => isAllowed(d, allow))
+
+		if (blockedDeps.length) {
 			failed = true
 			lines.push('**Blocked — new runtime dependencies:**', '')
-			for (const d of r.depDiff.added) lines.push(`- \`${d}\`@\`${r.deps[d]}\``)
+			for (const d of blockedDeps) lines.push(`- \`${d}\`@\`${r.deps[d]}\``)
+			lines.push('')
+		}
+
+		// Still listed, so an allowed addition stays visible in every release report.
+		if (allowedDeps.length) {
+			lines.push('**Allowed — new runtime dependencies on the allow-list:**', '')
+			for (const d of allowedDeps) lines.push(`- \`${d}\`@\`${r.deps[d]}\``)
 			lines.push('')
 		}
 

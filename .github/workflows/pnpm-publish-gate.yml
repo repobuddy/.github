@@ -25,28 +25,25 @@ name: pnpm-publish-gate
 #   - files that must never ship (tests, key material, env files, repo metadata)
 #   - new runtime `dependencies` that are not in the published version, unless the
 #     consuming repo acknowledges the specific dependency in `.github/publish-gate.json`
-#     (see the Publish gate section of this repo's README). There is no input to
-#     disable the gate: an ack names one dependency of one package and carries a
-#     written reason, so saying yes leaves a reviewable record.
+#     or the dependency is on the allow-list (below)
 # Reports, without blocking:
+#   - acknowledged new runtime dependencies, each with its written reason
+#   - new runtime dependencies on the allow-list, under their own heading
 #   - any other change to the tarball file list
+#
+# The allow-list is the owner's own packages, kept as `FIRST_PARTY` in
+# `.github/scripts/publish-gate.mjs` (`@unional/*`, `@repobuddy/*`, `type-plus`,
+# `unpartial`, ...). Depending on one of them is a move within the owner's own graph,
+# not a supply-chain surprise. Callers extend the list with `allowed-new-dependencies`:
+# exact package names or `@scope/*` patterns, one per line or comma-separated. Any
+# other wildcard fails the gate rather than widening it silently.
+#
+# `.github/publish-gate.json` is the narrower way to say yes: it names one dependency of
+# one package and carries a reason, so the yes is reviewed in the PR that adds it. See
+# the Publish gate section of this repo's README. There is no input to disable the gate.
 #
 # Removed dependencies and ordinary file churn are reported only: both are normal in
 # a legitimate release, and failing on them would train maintainers to ignore the gate.
-#
-# Ported from cyberuni/.github, which is where it was written and proven. Two
-# deliberate differences from that copy, both to match this repo's conventions:
-#   - node and pnpm are set up inline with pnpm/action-setup + actions/setup-node,
-#     as every other workflow here does. This repo has no setup-node-pnpm composite.
-#     Note `pnpm-version` is accepted and then unused, exactly as pnpm-verify.yml,
-#     pnpm-build.yml and pnpm-release-changeset-oidc.yml already do — pnpm's version
-#     comes from each consumer's `packageManager` field. The input is kept so the
-#     call signature matches cyberuni's copy and repos can move between orgs without
-#     editing their caller. Worth fixing across all four workflows at once, not here.
-#   - the script checkout pins `ref: v2` rather than a branch, because this repo's
-#     release lines live on tags: `v2` is the released v2 line and `main` is its
-#     unreleased development. Checking out `main` here would pull unreleased scripts
-#     into a released run.
 on:
   workflow_call:
     inputs:
@@ -62,6 +59,14 @@ on:
         type: boolean
         required: false
         default: true
+      allowed-new-dependencies:
+        description: >-
+          Extra package names or `@scope/*` patterns whose addition as a runtime
+          dependency is reported but not blocked. Newline- or comma-separated.
+          Extends the built-in first-party list.
+        type: string
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -72,22 +77,22 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # The gate script lives here rather than in every caller, so the org shares one
-      # copy and one review. Checked out to a dot-directory so it cannot be mistaken
+      # The gate script lives here rather than in every caller, so every owned org
+      # shares one copy and one review. Checked out to a dot-directory so it cannot be mistaken
       # for, or picked up by, the caller's own tooling.
       - uses: actions/checkout@v7
         with:
           repository: repobuddy/.github
+          # A release tag, not a branch: `v2` is the released v2 line and `main` is its
+          # unreleased development. Checking out `main` here would pull unreleased
+          # scripts into a released run.
           ref: v2
           path: .publish-gate
 
-      - uses: pnpm/action-setup@v6
-
-      - name: Use Node.js ${{ inputs.node-version }}
-        uses: actions/setup-node@v7
+      - uses: repobuddy/.github/.github/actions/setup-node-pnpm@v2
         with:
           node-version: ${{ inputs.node-version }}
-          cache: pnpm
+          pnpm-version: ${{ inputs.pnpm-version }}
 
       - name: Install Dependencies
         run: pnpm install
@@ -101,6 +106,8 @@ jobs:
 
       - name: Gate
         run: node .publish-gate/.github/scripts/publish-gate-cli.mjs
+        env:
+          PUBLISH_GATE_ALLOWED_DEPENDENCIES: ${{ inputs.allowed-new-dependencies }}
 
       # The report is the point of the job, so publish it even when the gate blocks.
       - name: Upload report

@@ -6,7 +6,7 @@
 import { readFileSync, writeFileSync, appendFileSync, existsSync, readdirSync, statSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { gatePackage, loadAcks, render } from './publish-gate.mjs'
+import { FIRST_PARTY, gatePackage, loadAcks, parseAllowList, render } from './publish-gate.mjs'
 
 const root = process.cwd()
 
@@ -50,9 +50,15 @@ function findPackages(dir, depth = 0, out = []) {
 // Load before walking. A malformed acknowledgement file is a hard stop for the whole
 // run, not a per-package failure — if the gate cannot read what has been approved it
 // cannot tell an approved dependency from an unapproved one for any package.
+//
+// The workflow's `allowed-new-dependencies` input is read here too, for the same
+// reason: an invalid entry must stop the run, not widen or narrow the gate silently.
+// It extends the built-in first-party list; it never replaces it.
 let acks
+let allow
 try {
 	acks = loadAcks(root)
+	allow = [...FIRST_PARTY, ...parseAllowList(process.env.PUBLISH_GATE_ALLOWED_DEPENDENCIES)]
 } catch (err) {
 	const msg = `## Publish gate\n\n**Result: blocked.**\n\n${String(err.message ?? err)}\n`
 	console.error(msg)
@@ -90,7 +96,7 @@ if (!results.length) {
 	process.exit(0)
 }
 
-const { body, failed } = render(results)
+const { body, failed } = render(results, { allow })
 const header = `## Publish gate\n\nInspecting ${results.length} publishable package(s) against the registry.\n\n`
 const out = header + body
 
