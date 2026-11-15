@@ -1,0 +1,183 @@
+name: bun-release-changeset-oidc
+# Secretless variant of bun-release-changeset.yml.
+#
+# Differences from that workflow:
+#   - No CI_GITHUB_TOKEN. Checkout and changesets/action both use the built-in
+#     GITHUB_TOKEN with the caller's grant. github-actions[bot] therefore opens and
+#     pushes the "version packages" PR, and GitHub creates the PR's `on: pull_request`
+#     runs (CI, CodeQL) but parks them as `action_required` until someone approves
+#     them. A ruleset that requires their checks leaves the PR blocked. So after
+#     changesets/action opens or updates the PR, this job finds the parked runs on the
+#     branch head, waiting up to about 60s for GitHub to create them, and approves each
+#     one (`POST /repos/{owner}/{repo}/actions/runs/{run_id}/approve`). The runs then
+#     execute against the PR, so every required check reports, CodeQL's code-scanning
+#     result included. The previous approach dispatched CI with `workflow_dispatch`,
+#     which satisfied the CI check but never produced the CodeQL result. A GitHub App
+#     token would also work, but it means a long-lived private key in org secrets; this
+#     needs no stored secret.
+#
+#     The caller must:
+#       - grant `id-token: write`, `contents: write` and `pull-requests: write` to
+#         the job that calls this workflow, plus `actions: write` for the approval.
+#         This workflow declares no `permissions:` of its own, so the caller's grant
+#         passes through unchanged. A block here would cap the token: every scope it
+#         did not list, `actions` included, would drop to `none`, and the approval
+#         would fail with 403 even when the caller grants `actions: write`. Listing
+#         `actions: write` here instead would break every caller that does not grant
+#         it, since a called workflow may not request more than its caller grants.
+#         Without `actions: write` the release still succeeds, but with a warning and
+#         a PR whose runs stay pending.
+#
+#     Callers no longer need `workflow_dispatch:` in their CI workflow's `on:` block
+#     (the previous approach dispatched it). Leaving it there is harmless.
+#   - No NPM_TOKEN, and no hand-written .npmrc. Publishes via npm trusted publishing
+#     (OIDC), which also emits provenance attestations. Each package needs a trusted
+#     publisher registered at npmjs.com/package/<name>/access naming the repo and the
+#     *caller* workflow's filename (release.yml), not this file.
+#
+# WHY OIDC WORKS HERE, EVEN THOUGH `bun publish` DOES NOT SUPPORT IT:
+#
+# changesets does not publish with the package manager it installed with. Its
+# getPublishTool() returns pnpm only when pnpm is detected, and `{name: "npm"}` for
+# everything else — bun included. So `changeset publish` shells out to `npm publish`, and
+# the OIDC exchange happens inside the npm CLI, which does support trusted publishing.
+# Verified against @changesets/cli 2.31.1.
+#
+# The consequence is that npm, not bun, must be current: the "Ensure npm supports trusted
+# publishing" step below is load-bearing, not boilerplate.
+#
+# Deliberately NO `registry-url` on setup-node, as in every other -oidc workflow here.
+# With it, setup-node writes an .npmrc containing
+# `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` that a secretless run can never
+# fill in, and the tooling sees an auth directive it cannot satisfy instead of reaching
+# the OIDC exchange (semantic-release/npm#1069).
+#
+# The playwright and vsce steps from bun-release-changeset.yml are intentionally absent.
+# They serve repos that need a browser or publish a VS Code extension; a repo needing
+# them should add them to its own caller or ask for a variant.
+#
+# The owned orgs have an org secret scope, so the argument here is not "there is nowhere to put a
+# token". It is that CI_GITHUB_TOKEN and NPM_TOKEN are long-lived credentials that expire
+# silently: an expired NPM_TOKEN is what left color-map not publishing for three months
+# without anyone noticing. OIDC credentials are minted per run and last minutes.
+#
+# Pair it with this repo's bun-verify.yml for the `code` job, which has an all-checks
+# job.
+#
+# Mirrors unional/.github's workflow of the same name. The executable YAML is identical
+# except that only this copy has the step that approves the version PR's runs, and
+# declares no top-level `permissions:`. Change both or neither.
+on:
+  workflow_call:
+    inputs:
+      bun-version:
+        type: string
+        required: false
+      node-version:
+        type: string
+        required: false
+        default: lts/*
+    outputs:
+      published:
+        description: 'Whether the release was published'
+        value: ${{ jobs.release.outputs.published }}
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      published: ${{ steps.changesets.outputs.published }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ inputs.bun-version }}
+
+      # Load-bearing: changesets publishes through the npm CLI (see header), and trusted
+      # publishing requires npm 11.5.1+. Node LTS may ship an older npm.
+      - name: Ensure npm supports trusted publishing
+        run: |
+          npm install -g npm@11
+          npm --version
+
+      - name: Install Dependencies
+        run: bun install
+
+      - run: bun run build
+
+      # changesets/action v2 is the release matched to @changesets/cli v3, which every
+      # caller now needs: npm 12 changed `npm info --json` to emit an array, and cli 2.x
+      # reads `.versions` straight off the parsed object. It comes back undefined, every
+      # version looks unpublished, and the release republishes into npm's E403
+      # "You cannot publish over the previously published versions".
+      #
+      # v2 renamed the inputs (version -> version-script, publish -> publish-script,
+      # commit -> commit-message) and dropped the GITHUB_TOKEN *env var* in favour of the
+      # github-token *input*. The old names are silently ignored, so a half-done bump
+      # leaves the action running with no publish script at all.
+      - name: Create Release Pull Request or Publish to npm
+        id: changesets
+        uses: changesets/action@v2.1.2
+        with:
+          commit-message: 'chore: version packages'
+          version-script: bun run version
+          publish-script: bun run release
+
+      # github-actions[bot] opens and pushes the version PR, so GitHub parks the PR's
+      # pull_request runs (CI, CodeQL) as action_required until someone approves them.
+      # Approve them so they run against the PR; see the header. A failed approval warns
+      # rather than failing an otherwise good release.
+      - name: Approve the version packages PR's pending runs
+        if: steps.changesets.outputs.pr-number != '' && steps.changesets.outputs.published != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION_BRANCH: changeset-release/${{ github.ref_name }}
+        run: |
+          grant="Grant 'actions: write' in the caller's 'permissions:' for the job that calls this workflow."
+          if ! sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$VERSION_BRANCH" --jq .object.sha 2>&1); then
+            echo "$sha"
+            echo "::warning::Could not read the head of $VERSION_BRANCH, so the version packages PR's runs stay pending approval and its required checks never report."
+            exit 0
+          fi
+          list() {
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs?branch=$VERSION_BRANCH&head_sha=$sha&per_page=100" \
+              --jq '.workflow_runs[] | select(.conclusion == "action_required" or .status == "action_required" or .status == "waiting") | .id'
+          }
+          # GitHub creates the PR's runs a few seconds after the push. Poll for up to
+          # about 60s, then list once more to catch workflows created a beat later.
+          ids=""
+          for _ in $(seq 1 12); do
+            if ! ids=$(list 2>&1); then
+              echo "$ids"
+              echo "::warning::Could not list the runs on $VERSION_BRANCH, so the version packages PR's runs stay pending approval and its required checks never report. $grant"
+              exit 0
+            fi
+            [ -n "$ids" ] && break
+            sleep 5
+          done
+          sleep 5
+          if more=$(list 2>/dev/null); then ids=$more; fi
+          if [ -z "$ids" ]; then
+            echo "::warning::No runs on $VERSION_BRANCH at $sha were waiting for approval after 60s. If the version packages PR is still blocked, approve its runs from the Actions tab."
+            exit 0
+          fi
+          for id in $ids; do
+            if out=$(gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$id/approve" 2>&1); then
+              echo "Approved run $id"
+            elif grep -qiE '403|Resource not accessible' <<<"$out"; then
+              echo "$out"
+              echo "::warning::GITHUB_TOKEN may not approve run $id, so it stays pending and the version packages PR stays blocked. $grant"
+            else
+              echo "$out"
+              echo "::warning::Could not approve run $id on $VERSION_BRANCH, so it stays pending and the version packages PR stays blocked. Check that the caller grants 'actions: write'."
+            fi
+          done
