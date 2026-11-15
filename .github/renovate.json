@@ -1,5 +1,12 @@
 {
   "extends": [
     "github>unional/renovate-preset"
+  ],
+  "packageRules": [
+    {
+      "description": "repobuddy/.github tags (v1, v2) are this repo's own workflow API versions, cut by hand. The internal self-references (setup-playwright@v2, setup-node-pnpm@v2) carry the moving alias of their own line and move only when a release is cut; a Renovate bump to the next major would cross the line split.",
+      "matchPackageNames": ["repobuddy/.github"],
+      "enabled": false
+    }
   ]
 }
