@@ -130,7 +130,7 @@ Not `v0.x`. Two reasons:
 ### What one version covers
 
 **Everything in this repo shares one tag** — all reusable workflows plus the
-`setup-playwright` composite action. They live in one repo, and a git tag names
+composite actions (`setup-playwright`, `setup-node-pnpm`). They live in one repo, and a git tag names
 a commit of the whole repo; there is no per-workflow versioning.
 
 The consequence, stated plainly: **a change to any one workflow bumps the tag
@@ -288,17 +288,19 @@ moved, the release is invisible to everyone pinning it.
 
 #### Internal refs
 
-Workflows in this repo consume this repo's own composite action:
+Workflows in this repo consume this repo's own composite actions,
+`setup-playwright` and `setup-node-pnpm`:
 
 ```text
         uses: repobuddy/.github/.github/actions/setup-playwright@v2
+        uses: repobuddy/.github/.github/actions/setup-node-pnpm@v2
 ```
 
 A reusable workflow cannot reference a sibling action by relative path — `./`
 resolves against the *caller's* checkout, not this repo's — so these must be
 fully-qualified `owner/repo/path@ref`. They carry the moving alias of their own
 line: `@v2`. That way a consumer pinned at `@v2` gets
-`setup-playwright` from `v2` too, and the refs need no touching on each release.
+the actions from `v2` too, and the refs need no touching on each release.
 
 ### Playwright is optional
 
