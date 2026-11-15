@@ -1,0 +1,58 @@
+name: pnpm-release-changeset-simple
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        type: string
+        # Pinned rather than an `lts/*` alias: alias resolution fetches the
+        # Node versions manifest, which has intermittently returned a
+        # non-array and failed the job with "manifest.filter is not a function".
+        default: '22'
+    secrets:
+      CI_GITHUB_TOKEN:
+        required: true
+permissions:
+  id-token: write
+  contents: read
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.CI_GITHUB_TOKEN }}
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: pnpm
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install npm with OIDC trusted publishing support
+        run: npm install -g npm@11
+
+      - run: pnpm build
+
+      # changesets/action v2 is the release matched to @changesets/cli v3, which every
+      # caller now needs: npm 12 changed `npm info --json` to emit an array, and cli 2.x
+      # reads `.versions` straight off the parsed object. It comes back undefined, every
+      # version looks unpublished, and the release republishes into npm's E403
+      # "You cannot publish over the previously published versions".
+      #
+      # v2 renamed the inputs (version -> version-script, publish -> publish-script,
+      # commit -> commit-message) and dropped the GITHUB_TOKEN *env var* in favour of the
+      # github-token *input*. The old names are silently ignored, so a half-done bump
+      # leaves the action running with no publish script at all.
+      - name: Create Release Pull Request or Publish to npm
+        uses: changesets/action@v2.1.2
+        with:
+          commit-message: 'chore: version packages'
+          version-script: pnpm run version
+          publish-script: pnpm run release
+          github-token: ${{ secrets.CI_GITHUB_TOKEN }}
