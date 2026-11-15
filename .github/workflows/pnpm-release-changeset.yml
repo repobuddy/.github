@@ -2,29 +2,38 @@ name: pnpm-release-changeset
 on:
   workflow_call:
     inputs:
+      node-version:
+        type: string
+        # Pinned rather than an `lts/*` alias: alias resolution fetches the
+        # Node versions manifest, which has intermittently returned a
+        # non-array and failed the job with "manifest.filter is not a function".
+        default: '24'
       pnpm-version:
         type: string
         required: false
+      skip-playwright:
+        type: boolean
+        required: false
+        default: false
+      # Install `vsce` globally, for a repo whose release script packages a VS Code
+      # extension. Off by default: no caller of this workflow needs it.
+      install-vsce:
+        type: boolean
+        required: false
+        default: false
     outputs:
       published:
         description: 'Whether the release was published'
         value: ${{ jobs.release.outputs.published }}
 permissions:
   id-token: write
-  # changesets/action v2 pushes release commits and tags through the GitHub API
-  # (push-with-git-cli defaults to false), which needs write here.
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    env:
-      PLAYWRIGHT_PATH: ~/.cache/ms-playwright
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     outputs:
       published: ${{ steps.changesets.outputs.published }}
     steps:
@@ -33,38 +42,51 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.CI_GITHUB_TOKEN }}
       - uses: pnpm/action-setup@v6
+        with:
+          version: ${{ inputs.pnpm-version }}
       - uses: actions/setup-node@v7
         with:
-          node-version: 26
+          node-version: ${{ inputs.node-version }}
           cache: pnpm
 
       - name: Install Dependencies
         run: pnpm install
 
       - name: Install playwright browsers
+        if: inputs.skip-playwright == false
         uses: repobuddy/.github/.github/actions/setup-playwright@v2
 
       - name: Install vsce
+        if: inputs.install-vsce
         run: pnpm install -g vsce
 
+      # Publishes through npm trusted publishing (OIDC), not an NPM_TOKEN in .npmrc.
+      # Trusted publishing requires npm 11.5.1+, so Node's bundled npm may be too old.
+      # `npm@latest` (npm 12) is safe on this line for the reason given in
+      # pnpm-release-changeset-oidc.yml: @changesets/cli v3 reads npm 12's array output.
+      - name: Install npm with OIDC trusted publishing support
+        run: npm install -g npm@latest
+
       - run: pnpm build
-      - name: update .npmrc with token
-        run: |
-          cat << EOF > "$HOME/.npmrc"
-            //registry.npmjs.org/:_authToken=$NPM_TOKEN
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # changesets/action v2 is the release matched to @changesets/cli v3, which every
+      # caller now needs: npm 12 changed `npm info --json` to emit an array, and cli 2.x
+      # reads `.versions` straight off the parsed object. It comes back undefined, every
+      # version looks unpublished, and the release republishes into npm's E403
+      # "You cannot publish over the previously published versions".
+      #
+      # v2 renamed the inputs (version -> version-script, publish -> publish-script,
+      # commit -> commit-message) and dropped the GITHUB_TOKEN *env var* in favour of the
+      # github-token *input*. The old names are silently ignored, so a half-done bump
+      # leaves the action running with no publish script at all.
       - name: Create Release Pull Request or Publish to npm
         id: changesets
         uses: changesets/action@v2.1.2
         with:
-          github-token: ${{ secrets.CI_GITHUB_TOKEN }}
           commit-message: 'chore: version packages'
           version-script: pnpm run version
           publish-script: pnpm run release
-        env:
-          GITHUB_TOKEN: ${{ secrets.CI_GITHUB_TOKEN }}
-          NPM_TOKEN: ''
+          github-token: ${{ secrets.CI_GITHUB_TOKEN }}
 
       # - name: Send a Slack notification if a publish happens
       #   if: steps.changesets.outputs.published == 'true'

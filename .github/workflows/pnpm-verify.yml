@@ -13,21 +13,36 @@ on:
       pnpm-version:
         type: string
         required: false
+      # The package script to run, `pnpm <command>`.
       command:
         type: string
         required: false
         default: 'verify'
+      skip-codecov:
+        type: boolean
+        required: false
+        default: false
+      # Which matrix leg uploads coverage. Defaults to `lts/*` so it tracks whatever the
+      # current LTS is, rather than naming a Node version that goes stale — a pinned
+      # number is what broke this step before (see the codecov step).
+      #
+      # If a caller's `node-version` matrix contains no `lts/*`, set this to one of the
+      # values it does contain, or nothing uploads.
+      codecov-node-version:
+        type: string
+        required: false
+        default: 'lts/*'
+      # Passed to codecov-action's `flags`, to tell uploads of a monorepo apart.
       codecov-flags:
         type: string
         required: false
-      # Force-skip the Playwright browser install.
+      # Force-skip the Playwright browser install and the Linux virtual display.
       #
       # Not normally needed: `setup-playwright` detects whether the consuming repo can
       # actually run Playwright and skips itself when it cannot, so a repo without
       # browser tests needs no input at all. This exists for the case where the repo
       # *does* have Playwright installed but this workflow should not spend time
-      # downloading browsers, and for parity with cyberuni/.github's input of the same
-      # name and semantics — repos move between the two orgs.
+      # downloading browsers.
       skip-playwright:
         type: boolean
         required: false
@@ -36,43 +51,88 @@ jobs:
   verify:
     runs-on: ${{ matrix.os }}
     strategy:
+      # Report every leg. With fail-fast on, the first failure cancels the others and
+      # they report "The operation was canceled" with no error of their own — which hides
+      # which legs are actually broken and sends you reading the wrong log.
+      fail-fast: false
       matrix:
         os: ${{ fromJson(inputs.os) }}
         node-version: ${{ fromJson(inputs.node-version) }}
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v7
+      - uses: repobuddy/.github/.github/actions/setup-node-pnpm@v2
         with:
           node-version: ${{ matrix.node-version }}
-          cache: pnpm
+          pnpm-version: ${{ inputs.pnpm-version }}
+
+      # Only Linux runners need a virtual display, and only when there are browsers to
+      # drive. This previously ran unconditionally, before checkout, on all three OSes —
+      # `Xvfb` does not exist on the macOS or Windows images, so those legs were doing
+      # nothing useful (they stayed green because the trailing `&` backgrounds it).
+      - name: Start X Virtual Frame Buffer
+        if: runner.os == 'Linux' && inputs.skip-playwright == false
+        run: echo "DISPLAY=:99.0" >> $GITHUB_ENV && Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
 
       - name: Install Dependencies
         run: pnpm install
 
+      # Browsers come from the composite action, and they are installed AFTER
+      # `pnpm install` — both details are load-bearing.
+      #
+      # This used to be `pnpx playwright install --with-deps chromium`, running BEFORE
+      # the install because nothing was in node_modules yet. `pnpx` resolves playwright
+      # from the REGISTRY, so it downloaded whatever the latest playwright wanted while
+      # the tests ran against the repo's pinned copy — a build-number mismatch, e.g.
+      # `chromium_headless_shell-1234` installed against a project expecting `-1208`:
+      #
+      #   browserType.launch: Executable doesn't exist at
+      #   ~/.cache/ms-playwright/chromium_headless_shell-1208/...
+      #
+      # It fails only on repos that actually drive a browser, so it stayed invisible
+      # until one arrived (unional/tersify#443). The composite action runs
+      # `pnpm exec playwright install`, which uses the repo's own version, caches on
+      # that version rather than on the lockfile hash, and skips gracefully when the
+      # repo has no playwright at all. bun-verify.yml has always been shaped this way.
       - name: Install playwright browsers
         if: inputs.skip-playwright == false
         uses: repobuddy/.github/.github/actions/setup-playwright@v2
 
       - name: Verify
-        if: matrix.os == 'ubuntu-latest'
-        run: xvfb-run -a pnpm ${{ inputs.command }}
-      - name: Verify
-        if: matrix.os != 'ubuntu-latest'
         run: pnpm ${{ inputs.command }}
 
+      # Visual and snapshot tests write their diffs here. Keep them when a leg fails,
+      # so the failure can be read without re-running it locally.
       - name: Archive snapshots
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: snapshots
+          name: snapshots-${{ matrix.os }}-${{ strategy.job-index }}
           path: |
             **/__snapshots__/linux
             **/__vis__/**/__diffs__
             **/__vis__/**/__results__
+
+      # Upload once, from the Linux leg running `codecov-node-version` (default `lts/*`).
+      #
+      # This condition used to read `matrix.node-version == 18`, which could never be
+      # true against the default matrix of `["lts/-1", "lts/*"]` — so coverage was
+      # silently never uploaded for any repo taking the defaults. Pinning a Node number
+      # here is the bug; an `lts/*` alias tracks the matrix instead of going stale.
+      #
+      # `skip-codecov: true` remains the way to opt out.
+      #
+      # No CODECOV_TOKEN: uploads rely on the Codecov org setting `Token authentication
+      # for public repositories` being `Not required`. Flip that back and every upload
+      # fails SILENTLY — Codecov answers `Token required - not valid tokenless upload`
+      # and codecov-action reports the rejection as a SUCCESSFUL step. A green codecov
+      # step is not proof an upload landed; read the log. Observed on
+      # cyberuni/color-map#214.
+      #
+      # Coverage never gates a merge, so this must stay non-fatal: a Codecov outage must
+      # not fail `verify` and with it the required `code / all-checks` context. The badge
+      # is the standing monitor — if uploads stop, it goes stale.
       - name: codecov
-        if: matrix.os == 'ubuntu-latest' && matrix.node-version == 'lts/*'
+        if: inputs.skip-codecov == false && matrix.os == 'ubuntu-latest' && matrix.node-version == inputs.codecov-node-version
         uses: codecov/codecov-action@v7
         # A coverage upload must never fail CI: the tests are the gate.
         continue-on-error: true
