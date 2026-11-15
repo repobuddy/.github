@@ -379,6 +379,28 @@ Once the dependency ships it becomes part of the published baseline and no longe
 diffs as new, so the ack is inert. The gate lists those as stale and safe to
 delete, so the file does not accumulate permanent exemptions.
 
+### The first-party allow-list
+
+The owner's own packages are a second way through. A new dependency on one of
+`FIRST_PARTY` in `.github/scripts/publish-gate.mjs` (`@unional/*`, `@repobuddy/*`,
+`type-plus`, `unpartial`, `global-store`, ...) is a move within the owner's own
+graph, not a supply-chain surprise. The gate reports it under its own heading and
+does not block.
+
+Callers extend the list with the `allowed-new-dependencies` input: exact package
+names or `@scope/*` patterns, one per line or comma-separated. Any other wildcard
+blocks the run rather than widening the gate silently.
+
+```yaml
+publish-gate:
+  uses: repobuddy/.github/.github/workflows/pnpm-publish-gate.yml@v2
+  with:
+    allowed-new-dependencies: '@acme/*, zod'
+```
+
+Prefer an ack for a single dependency: it carries a reason and goes stale on its own.
+The input suits a family of packages the repo keeps depending on.
+
 There is no input to disable the gate. If you need to publish something the gate
-refuses, fix the package or acknowledge the specific dependency — the two paths
-that leave a record.
+refuses, fix the package, acknowledge the specific dependency, or add it to the
+allow-list. Each of those leaves a record in a reviewed file.

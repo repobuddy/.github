@@ -4,7 +4,79 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { packCommand, parsePackFiles, usesPnpm } from './publish-gate.mjs'
+import { FIRST_PARTY, isAllowed, packCommand, parseAllowList, parsePackFiles, render, usesPnpm } from './publish-gate.mjs'
+
+function result(added, deps, acknowledged = []) {
+	return {
+		name: 'standard-log',
+		version: '2.0.0',
+		publishedVersion: '1.0.0',
+		files: ['index.js'],
+		risky: [],
+		fileDiff: { added: [], removed: [] },
+		depDiff: { added, removed: [] },
+		deps,
+		acknowledged,
+		staleAcks: [],
+	}
+}
+
+test('a new first-party dependency is reported, not blocked', () => {
+	const { body, failed } = render([result(['unpartial'], { unpartial: '^1.0.8' })])
+	assert.equal(failed, false)
+	assert.match(body, /Allowed — new runtime dependencies/)
+	assert.match(body, /`unpartial`@`\^1\.0\.8`/)
+	assert.doesNotMatch(body, /Blocked/)
+})
+
+test('an unknown new dependency still blocks', () => {
+	const { body, failed } = render([result(['left-pad'], { 'left-pad': '^1.0.0' })])
+	assert.equal(failed, true)
+	assert.match(body, /Blocked — new runtime dependencies:\*\*\n\n- `left-pad`/)
+	assert.doesNotMatch(body, /Allowed/)
+})
+
+test('allowed and unknown additions are split, and the unknown one still blocks', () => {
+	const { body, failed } = render([result(['@just-web/types', 'evil'], { '@just-web/types': '^1.0.0', evil: '1.0.0' })])
+	assert.equal(failed, true)
+	assert.match(body, /Blocked — new runtime dependencies:\*\*\n\n- `evil`/)
+	assert.match(body, /Allowed — new runtime dependencies on the allow-list:\*\*\n\n- `@just-web\/types`/)
+})
+
+test('an acknowledged dependency is reported with its reason, apart from the allow-list', () => {
+	const { body, failed } = render([result(['unpartial'], { unpartial: '1', zod: '3' }, [{ dep: 'zod', reason: 'Schema validation for the config loader.' }])])
+	assert.equal(failed, false)
+	assert.match(body, /acknowledged in `\.github\/publish-gate\.json`:\*\*\n\n- `zod`@`3` — Schema validation/)
+	assert.match(body, /Allowed — new runtime dependencies on the allow-list:\*\*\n\n- `unpartial`/)
+})
+
+test('the stable-packages first-party entries are on the list', () => {
+	assert.equal(isAllowed('global-store', FIRST_PARTY), true)
+	assert.equal(isAllowed('stable-store', FIRST_PARTY), true)
+})
+
+test('a scope pattern matches packages in that scope only', () => {
+	assert.equal(isAllowed('@unional/fixture', FIRST_PARTY), true)
+	assert.equal(isAllowed('@unional-evil/fixture', FIRST_PARTY), false)
+	assert.equal(isAllowed('unional', FIRST_PARTY), false)
+	assert.equal(isAllowed('type-plus-evil', FIRST_PARTY), false)
+})
+
+test('a caller-supplied allow-list extends the default', () => {
+	const allow = [...FIRST_PARTY, ...parseAllowList('@acme/*, lodash\nzod\n')]
+	const { failed } = render([result(['@acme/x', 'lodash', 'zod', 'unpartial'], { '@acme/x': '1', lodash: '4', zod: '3', unpartial: '1' })], { allow })
+	assert.equal(failed, false)
+})
+
+test('parseAllowList accepts names and scope patterns', () => {
+	assert.deepEqual(parseAllowList(' @acme/* ,lodash\n\n zod '), ['@acme/*', 'lodash', 'zod'])
+	assert.deepEqual(parseAllowList(''), [])
+	assert.deepEqual(parseAllowList(undefined), [])
+})
+
+test('parseAllowList rejects wildcards that are not a whole scope', () => {
+	for (const bad of ['*', 'lodash*', '@acme/foo-*', '@*/x']) assert.throws(() => parseAllowList(bad), /invalid allow-list entry/)
+})
 
 function repo(files) {
 	const dir = mkdtempSync(join(tmpdir(), 'pg-test-'))
