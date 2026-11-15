@@ -162,17 +162,28 @@ across CLI majors means moving its pin in the same change.
 ## Release workflows
 
 Two variants of the changesets release path, per line. They differ only in how
-they authenticate.
+they authenticate to GitHub. Both publish to npm through trusted publishing
+(OIDC), so both need a trusted publisher registered for each package (step 1
+below) and neither reads `NPM_TOKEN`.
 
 | Workflow | GitHub auth | npm auth |
 | --- | --- | --- |
-| `pnpm-release-changeset.yml` | `CI_GITHUB_TOKEN` | `NPM_TOKEN` |
+| `pnpm-release-changeset.yml` | `CI_GITHUB_TOKEN` | trusted publishing (OIDC) |
 | `pnpm-release-changeset-oidc.yml` | built-in `GITHUB_TOKEN` | trusted publishing (OIDC) |
 
-**Prefer the OIDC variant for new repos, and migrate existing ones.** Both
-tokens are long-lived credentials that expire silently and are worth stealing;
-OIDC credentials are minted per run and last minutes. Trusted publishing also
-emits provenance attestations.
+**Prefer the OIDC variant for new repos, and migrate existing ones.**
+`CI_GITHUB_TOKEN` is a long-lived credential that expires silently and is worth
+stealing; OIDC credentials are minted per run and last minutes. Trusted
+publishing also emits provenance attestations.
+
+Both take these optional inputs:
+
+| Input | Default | Effect |
+| --- | --- | --- |
+| `node-version` | `'24'` | Node.js for the release job. |
+| `pnpm-version` | from `packageManager` | pnpm for the release job. |
+| `skip-playwright` | `false` | Skip the Playwright browser install before the build. |
+| `install-vsce` | `false` | Install `vsce` globally, for a release that packages a VS Code extension. |
 
 ### Adopting the OIDC variant
 
@@ -315,10 +326,30 @@ without Playwright — `verify` died after `pnpm install` and before ever runnin
 which is why it went unnoticed until `repobuddy/jest-watch-toggle-config-2`
 adopted them.
 
-`pnpm-verify.yml` also takes `skip-playwright: true` to force-skip the step even
-when Playwright *is* installed. It is not needed for the "repo has no Playwright"
-case — detection covers that — and exists mainly for parity with
-`cyberuni/.github`'s input of the same name, since repos move between the orgs.
+`pnpm-verify.yml` also takes `skip-playwright: true` to force-skip the step, and
+the Linux virtual display, even when Playwright *is* installed. It is not needed
+for the "repo has no Playwright" case, because detection covers that.
+
+## Verify
+
+`pnpm-verify.yml` runs `pnpm <command>` on every leg of an OS × Node matrix and
+reports one `all-checks` result. A failing leg does not cancel the others
+(`fail-fast: false`), so each broken leg reports its own error.
+
+| Input | Default | Effect |
+| --- | --- | --- |
+| `os` | `["ubuntu-latest", "macos-latest", "windows-latest"]` | The OS matrix, as JSON. |
+| `node-version` | `["lts/-1", "lts/*"]` | The Node.js matrix, as JSON. |
+| `pnpm-version` | from `packageManager` | pnpm for every leg. |
+| `command` | `verify` | The package script to run. |
+| `skip-playwright` | `false` | Skip the Playwright install and the Linux virtual display. |
+| `skip-codecov` | `false` | Skip the coverage upload. |
+| `codecov-node-version` | `lts/*` | The Node leg, on `ubuntu-latest`, that uploads coverage. |
+| `codecov-flags` | none | Passed to codecov-action's `flags`. |
+
+When a leg fails, its snapshot and visual-test diffs (`**/__snapshots__/linux`,
+`**/__vis__/**/__diffs__`, `**/__vis__/**/__results__`) are uploaded as an
+artifact named `snapshots-<os>-<job index>`.
 
 ## Publish gate
 

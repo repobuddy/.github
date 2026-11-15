@@ -58,6 +58,19 @@ on:
         type: string
         required: false
         default: '24'
+      # Install Playwright browsers before the build. On by default; `setup-playwright`
+      # already skips itself in a repo without Playwright, so this only saves time in a
+      # repo that has Playwright but does not need browsers to build.
+      skip-playwright:
+        type: boolean
+        required: false
+        default: false
+      # Install `vsce` globally, for a repo whose release script packages a VS Code
+      # extension. Off by default: no caller of this workflow needs it.
+      install-vsce:
+        type: boolean
+        required: false
+        default: false
     outputs:
       published:
         description: 'Whether the release was published'
@@ -68,8 +81,6 @@ concurrency: ${{ github.workflow }}-${{ github.ref }}
 jobs:
   release:
     runs-on: ubuntu-latest
-    env:
-      PLAYWRIGHT_PATH: ~/.cache/ms-playwright
     outputs:
       published: ${{ steps.changesets.outputs.published }}
     steps:
@@ -77,13 +88,24 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Version comes from `packageManager` in package.json unless overridden.
       - uses: pnpm/action-setup@v6
+        with:
+          version: ${{ inputs.pnpm-version }}
 
+      # No `registry-url:` on purpose. It only exists to write an auth stanza —
+      # `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` in a temp .npmrc — which
+      # this secretless workflow can never fill in. Every npm and pnpm invocation then
+      # warns "Failed to replace env in config", and worse, `changeset publish`'s
+      # "is this version already on the registry?" probe comes back empty, so it tries
+      # to publish an already-published version and dies on npm's E403
+      # "You cannot publish over the previously published versions". The registry itself
+      # is not at stake: npmjs.org is npm's default, and repos that care say so in their
+      # own .npmrc.
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ inputs.node-version }}
           cache: pnpm
-          registry-url: https://registry.npmjs.org
 
       # Trusted publishing requires npm 11.5.1+. Node LTS may ship an older npm.
       #
@@ -102,14 +124,22 @@ jobs:
         run: pnpm install
 
       - name: Install playwright browsers
+        if: inputs.skip-playwright == false
         uses: repobuddy/.github/.github/actions/setup-playwright@v2
 
       - name: Install vsce
+        if: inputs.install-vsce
         run: pnpm install -g vsce
 
       - run: pnpm build
 
       # No .npmrc token step: the OIDC exchange supplies credentials at publish time.
+      #
+      # changesets/action v2 renamed the inputs (version -> version-script, publish ->
+      # publish-script, commit -> commit-message) and dropped the GITHUB_TOKEN *env var*
+      # in favour of the github-token *input*, which defaults to the built-in token. The
+      # old names are silently ignored, so a half-done bump leaves the action running
+      # with no publish script at all.
       - name: Create Release Pull Request or Publish to npm
         id: changesets
         uses: changesets/action@v2.1.2
@@ -117,8 +147,6 @@ jobs:
           commit-message: 'chore: version packages'
           version-script: pnpm run version
           publish-script: pnpm run release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # github-actions[bot] opens and pushes the version PR, so GitHub parks the PR's
       # pull_request runs (CI, CodeQL) as action_required until someone approves them.
