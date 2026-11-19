@@ -16,29 +16,24 @@ References:
 
 ### Which ref to pin
 
-**Pin a tag, never `@main`.** Which tag depends on one thing only — the major of
-`@changesets/cli` in your repo:
-
-| Your `@changesets/cli` | Pin | Because |
-| --- | --- | --- |
-| v2 | `@v1` | `pnpm-release-changeset*.yml` uses `changesets/action@v1` |
-| v3 | `@v2` | `pnpm-release-changeset*.yml` uses `changesets/action@v2` |
+**Pin a tag, never `@main`.** Pin `@v2`. It is the line for `@changesets/cli`
+v3, and `pnpm-release-changeset*.yml` uses `changesets/action@v2`.
 
 ```yaml
 jobs:
   verify:
-    uses: repobuddy/.github/.github/workflows/pnpm-verify.yml@v1
+    uses: repobuddy/.github/.github/workflows/pnpm-verify.yml@v2
 ```
 
-If you do not use the changesets release workflows at all, either tag works and
-the newer one is fine — every other workflow is byte-identical across the two.
+`v1` is retired. It is frozen at its last release and receives no fixes, so do
+not pin it. A repo still on `@changesets/cli` v2 must move to v3 and pin `@v2`.
 
-`v1` and `v2` are *moving* tags. Each is re-pointed forward on every
-backward-compatible release within its line, so you get fixes without doing
-anything. Neither is ever moved across a breaking change.
+`v2` is a *moving* tag. It is re-pointed forward on every backward-compatible
+release within its line, so you get fixes without doing anything. It is never
+moved across a breaking change.
 
 If you need a ref that never moves under you, pin the exact version instead
-(`@v1.0.0`) and accept that you must bump it by hand to get any fix.
+(`@v2.0.0`) and accept that you must bump it by hand to get any fix.
 
 Do **not** pin `@main`. `main` is the development branch: it carries unreleased
 and possibly broken work, and every consumer on it takes every change the
@@ -61,9 +56,8 @@ supported; use Changesets action v1 instead."* There is no configuration that
 makes one workflow serve both.
 
 Every consumer is on `@changesets/cli` v3, so `main` is the v2 line and
-`pnpm-release-changeset*.yml` uses `changesets/action@v2`. The `v1` tag stays at
-the last v1 release for any repo that returns to CLI v2; nothing is developed
-against it.
+`pnpm-release-changeset*.yml` uses `changesets/action@v2`. The `v1` tag is
+frozen at the last v1 release and nothing is developed against it.
 
 ### The scheme
 
