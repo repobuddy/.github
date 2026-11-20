@@ -2,11 +2,23 @@
   "extends": [
     "github>repobuddy/renovate-preset"
   ],
+  "platformAutomerge": true,
   "packageRules": [
     {
       "description": "repobuddy/.github tags (v1, v2) are this repo's own workflow API versions, cut by hand. The internal self-references (setup-playwright@v2, setup-node-pnpm@v2) carry the moving alias of their own line and move only when a release is cut; a Renovate bump to the next major would cross the line split.",
       "matchPackageNames": ["repobuddy/.github"],
       "enabled": false
+    },
+    {
+      "description": "Action bumps merge themselves once CI is green. This replaces the org Mergify rule removed in #57; unlike that rule, `matchUpdateTypes` actually excludes majors.",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "automerge": true
+    },
+    {
+      "description": "Majors reach every consumer pinned to a moving major alias the moment they land, so they stay a human decision.",
+      "matchUpdateTypes": ["major"],
+      "automerge": false
     }
   ]
 }
