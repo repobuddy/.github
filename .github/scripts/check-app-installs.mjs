@@ -19,7 +19,8 @@
 import { execFileSync } from 'node:child_process'
 
 const APP_SLUG = process.argv[2] ?? 'repobuddy'
-const EXPECTED_PERMISSIONS = { contents: 'write', metadata: 'read' }
+// Pull requests: write lets min-release-age.yml open the restore PR (repobuddy/repobuddy#972).
+const EXPECTED_PERMISSIONS = { contents: 'write', metadata: 'read', pull_requests: 'write' }
 const EXPECTED_EVENTS = []
 
 function gh(args) {

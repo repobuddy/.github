@@ -503,6 +503,67 @@ Known limits:
 - Catalog entries in `pnpm-workspace.yaml` are attributed to the packages that
   use them only in the one-entry-per-line form pnpm and Renovate write.
 
+## Minimum-release-age restore
+
+[`min-release-age.yml`](.github/workflows/min-release-age.yml) removes the
+minimum-release-age lifts whose window has passed and opens, or updates, a
+restore PR. It runs `repobuddy release-age restore` from the published
+[`repobuddy`](https://www.npmjs.com/package/repobuddy) CLI, so the caller keeps
+no script copy. Only lines that carry a `# min-release-age: lift … until …`
+marker are touched. The `min-release-age` skill in
+[repobuddy/repobuddy](https://github.com/repobuddy/repobuddy) writes those
+lines.
+
+The push and the PR use a token minted from the `repobuddy` GitHub App. A PR
+opened with `GITHUB_TOKEN` does not trigger `pull_request` workflows, so the
+required checks would never run on it. A repo where the App is installed needs
+no `MIN_RELEASE_AGE_TOKEN` secret.
+
+### Caller
+
+```yaml
+# .github/workflows/min-release-age.yml
+name: min-release-age
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  restore:
+    uses: repobuddy/.github/.github/workflows/min-release-age.yml@v2
+    secrets: inherit
+    # with:
+    #   branch: chore/min-release-age-restore
+    #   repobuddy-version: '4'
+    #   node-version: lts/*
+```
+
+Never trigger it on `pull_request_target` or on any event that runs untrusted
+input. Scheduled workflows run only on the default branch.
+
+Inputs:
+
+| Input | Default | Effect |
+| --- | --- | --- |
+| `branch` | `chore/min-release-age-restore` | The branch the restore PR comes from. It is force-pushed on each run that removes a lift. |
+| `repobuddy-version` | `'4'` | The `repobuddy` version or range that runs the restore. |
+| `node-version` | `lts/*` | Node.js for the CLI. |
+
+Secrets, passed with `secrets: inherit`:
+
+| Secret | Used for |
+| --- | --- |
+| `REPOBUDDY_APP_ID` | The GitHub App that pushes the branch and opens the PR. |
+| `REPOBUDDY_APP_PRIVATE_KEY` | The same App's private key. |
+
+The App needs Contents: write, Metadata: read and Pull requests: write.
+`node .github/scripts/check-app-installs.mjs` reports each org whose
+installation has a different set.
+
 ## Publish gate
 
 `pnpm-publish-gate.yml` packs each publishable package from the working tree and

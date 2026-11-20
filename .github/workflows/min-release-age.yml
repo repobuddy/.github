@@ -1,0 +1,96 @@
+name: min-release-age
+# Removes minimum-release-age lifts whose window has passed and opens, or updates, the
+# restore PR (repobuddy/repobuddy#972). Only lines carrying a
+# `# min-release-age: lift … until …` marker are touched; the `repobuddy` CLI's
+# `release-age restore` does the edit, so the caller holds no script copy.
+#
+# Token: the push and the PR use a token minted from the repobuddy GitHub App. A PR
+# opened, or a branch pushed, with GITHUB_TOKEN does not trigger `pull_request`
+# workflows, so the required checks would never run on the restore PR. This replaces
+# the per-repo MIN_RELEASE_AGE_TOKEN secret. The App needs Contents: write and Pull
+# requests: write on the caller's repo; .github/scripts/check-app-installs.mjs checks
+# that every org's installation has that set. The token is minted only when there is
+# something to commit, after the CLI has run.
+#
+# The caller must:
+#   - trigger on `schedule` and/or `workflow_dispatch`. Never on `pull_request_target`
+#     or any event that runs untrusted input.
+#   - grant `contents: read` to the calling job. The App token, not GITHUB_TOKEN,
+#     writes.
+#   - pass the REPOBUDDY_APP_ID and REPOBUDDY_APP_PRIVATE_KEY secrets (`secrets: inherit`).
+# See the repository README for the caller snippet.
+on:
+  workflow_call:
+    inputs:
+      branch:
+        description: The branch the restore PR is opened from. It is force-pushed on every run that removes a lift.
+        type: string
+        required: false
+        default: chore/min-release-age-restore
+      repobuddy-version:
+        description: The `repobuddy` npm version or range that runs `release-age restore`.
+        type: string
+        required: false
+        default: '4'
+      node-version:
+        type: string
+        required: false
+        default: lts/*
+    secrets:
+      REPOBUDDY_APP_ID:
+        required: true
+      REPOBUDDY_APP_PRIVATE_KEY:
+        required: true
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    concurrency:
+      group: min-release-age-${{ github.repository }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      # Run from outside the checkout, so the caller's own .npmrc (for example its
+      # `min-release-age` gate) does not apply to fetching the CLI.
+      - name: Remove expired lifts
+        id: restore
+        env:
+          VERSION: ${{ inputs.repobuddy-version }}
+        working-directory: ${{ runner.temp }}
+        run: npx --yes "repobuddy@${VERSION}" release-age restore --dir "$GITHUB_WORKSPACE" --github-output
+
+      - uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        if: steps.restore.outputs.removed != '0'
+        id: app-token
+        with:
+          app-id: ${{ secrets.REPOBUDDY_APP_ID }}
+          private-key: ${{ secrets.REPOBUDDY_APP_PRIVATE_KEY }}
+
+      - name: Open restore PR
+        if: steps.restore.outputs.removed != '0'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          BRANCH: ${{ inputs.branch }}
+          BODY: ${{ steps.restore.outputs.body }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -C "$BRANCH"
+          git -c core.hooksPath=/dev/null commit -am 'chore: restore minimum release age'
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git -c core.hooksPath=/dev/null push --force "$remote" "HEAD:refs/heads/${BRANCH}"
+          if [ "$(gh pr view "$BRANCH" --json state --jq .state 2>/dev/null)" = OPEN ]; then
+            gh pr edit "$BRANCH" --body "$BODY"
+          else
+            gh pr create --head "$BRANCH" --title 'chore: restore minimum release age' --body "$BODY"
+          fi
