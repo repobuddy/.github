@@ -506,13 +506,13 @@ Known limits:
 ## Minimum-release-age restore
 
 [`min-release-age.yml`](.github/workflows/min-release-age.yml) removes the
-minimum-release-age lifts whose window has passed and opens, or updates, a
+minimum-release-age exemptions whose window has passed and opens, or updates, a
 restore PR. It runs `repobuddy release-age restore` from the published
 [`repobuddy`](https://www.npmjs.com/package/repobuddy) CLI, so the caller keeps
-no script copy. Only lines that carry a `# min-release-age: lift … until …`
-marker are touched. The `min-release-age` skill in
-[repobuddy/repobuddy](https://github.com/repobuddy/repobuddy) writes those
-lines.
+no script copy. Only lines that carry a `# min-release-age: exempt … until …`
+marker are touched; older `lift` markers are still read. The `min-release-age`
+skill in [repobuddy/repobuddy](https://github.com/repobuddy/repobuddy) writes
+those lines.
 
 The push and the PR use a token minted from the `repobuddy` GitHub App. A PR
 opened with `GITHUB_TOKEN` does not trigger `pull_request` workflows, so the
@@ -538,7 +538,7 @@ jobs:
     secrets: inherit
     # with:
     #   branch: chore/min-release-age-restore
-    #   repobuddy-version: '4'
+    #   repobuddy-version: '5'
     #   node-version: lts/*
 ```
 
@@ -549,8 +549,8 @@ Inputs:
 
 | Input | Default | Effect |
 | --- | --- | --- |
-| `branch` | `chore/min-release-age-restore` | The branch the restore PR comes from. It is force-pushed on each run that removes a lift. |
-| `repobuddy-version` | `'4'` | The `repobuddy` version or range that runs the restore. |
+| `branch` | `chore/min-release-age-restore` | The branch the restore PR comes from. It is force-pushed on each run that removes an exemption. |
+| `repobuddy-version` | `'5'` | The `repobuddy` version or range that runs the restore. |
 | `node-version` | `lts/*` | Node.js for the CLI. |
 
 Secrets, passed with `secrets: inherit`:

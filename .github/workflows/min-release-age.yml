@@ -1,8 +1,9 @@
 name: min-release-age
-# Removes minimum-release-age lifts whose window has passed and opens, or updates, the
-# restore PR (repobuddy/repobuddy#972). Only lines carrying a
-# `# min-release-age: lift … until …` marker are touched; the `repobuddy` CLI's
-# `release-age restore` does the edit, so the caller holds no script copy.
+# Removes minimum-release-age exemptions whose window has passed and opens, or
+# updates, the restore PR (repobuddy/repobuddy#972). Only lines carrying a
+# `# min-release-age: exempt … until …` marker are touched (older `lift` markers
+# are still read); the `repobuddy` CLI's `release-age restore` does the edit, so
+# the caller holds no script copy.
 #
 # Token: the push and the PR use a token minted from the repobuddy GitHub App. A PR
 # opened, or a branch pushed, with GITHUB_TOKEN does not trigger `pull_request`
@@ -23,7 +24,7 @@ on:
   workflow_call:
     inputs:
       branch:
-        description: The branch the restore PR is opened from. It is force-pushed on every run that removes a lift.
+        description: The branch the restore PR is opened from. It is force-pushed on every run that removes an exemption.
         type: string
         required: false
         default: chore/min-release-age-restore
@@ -31,7 +32,7 @@ on:
         description: The `repobuddy` npm version or range that runs `release-age restore`.
         type: string
         required: false
-        default: '4'
+        default: '5'
       node-version:
         type: string
         required: false
@@ -61,7 +62,7 @@ jobs:
 
       # Run from outside the checkout, so the caller's own .npmrc (for example its
       # `min-release-age` gate) does not apply to fetching the CLI.
-      - name: Remove expired lifts
+      - name: Remove expired exemptions
         id: restore
         env:
           VERSION: ${{ inputs.repobuddy-version }}
